@@ -1,7 +1,7 @@
 name: mfuko_wa_kanisa
 description: MFUKO WA MAPATO YA KANISA - Usimamizi wa Michango na Matumizi ya Kanisa
 publish_to: 'none'
-version: 0.6.0+6
+version: 0.7.0+7
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
