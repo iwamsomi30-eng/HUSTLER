@@ -6,6 +6,7 @@ import 'dashboard_page.dart';
 import 'contribution_input_page.dart';
 import 'contribution_records_page.dart';
 import 'expenditure_input_page.dart';
+import 'expenditure_records_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -15,13 +16,13 @@ class _Nav {
 }
 
 const _navMain = [
-  _Nav(Icons.home_rounded, 'nav_dashboard', 7),
+  _Nav(Icons.home_rounded, 'nav_dashboard', 8),
   _Nav(Icons.person_add_alt_1, 'nav_michango_input', 2),
   _Nav(Icons.receipt_long, 'nav_michango_records', 3),
   _Nav(Icons.request_quote, 'nav_matumizi_input', 4),
-  _Nav(Icons.description_outlined, 'nav_matumizi_records', 4),
-  _Nav(Icons.bar_chart_rounded, 'nav_muhtasari', 5),
-  _Nav(Icons.account_balance_wallet, 'nav_salio', 6),
+  _Nav(Icons.description_outlined, 'nav_matumizi_records', 5),
+  _Nav(Icons.bar_chart_rounded, 'nav_muhtasari', 6),
+  _Nav(Icons.account_balance_wallet, 'nav_salio', 7),
 ];
 const _navBottom = [
   _Nav(Icons.settings, 'nav_settings', 10),
@@ -52,6 +53,7 @@ class _AppShellState extends State<AppShell> {
     if (_index == 1) return const ContributionInputPage();
     if (_index == 2) return const ContributionRecordsPage();
     if (_index == 3) return const ExpenditureInputPage();
+    if (_index == 4) return const ExpenditureRecordsPage();
     if (_index == 8) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
@@ -134,14 +136,11 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Solid opaque color is intentionally used instead of a gradient here:
+    // it renders consistently on Flutter Windows and prevents white/transparent
+    // sidebar backgrounds on some desktop graphics drivers.
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [C.navy, C.navyDark],
-        ),
-      ),
+      color: C.navy,
       child: SafeArea(
         child: Column(
           children: [
