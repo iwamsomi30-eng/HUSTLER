@@ -21,6 +21,34 @@ jobs:
         run: flutter create --platforms=android --project-name mfuko_wa_kanisa --org tz.mfuko .
       - name: Jina la app
         run: sed -i 's/android:label="[^"]*"/android:label="Mfuko wa Mapato ya Kanisa"/' android/app/src/main/AndroidManifest.xml
+      - name: Lazimisha compileSdk 36 kwa plugins zote
+        run: |
+          if [ -f android/build.gradle.kts ]; then
+          cat >> android/build.gradle.kts <<'EOF'
+
+          subprojects {
+              val fixSdk = {
+                  extensions.findByName("android")?.let {
+                      (it as com.android.build.gradle.BaseExtension).compileSdkVersion(36)
+                  }
+                  Unit
+              }
+              if (state.executed) fixSdk() else afterEvaluate { fixSdk() }
+          }
+          EOF
+          else
+          cat >> android/build.gradle <<'EOF'
+
+          subprojects { p ->
+              def fixSdk = {
+                  if (p.hasProperty('android')) {
+                      p.android { compileSdkVersion 36 }
+                  }
+              }
+              if (p.state.executed) { fixSdk() } else { p.afterEvaluate { fixSdk() } }
+          }
+          EOF
+          fi
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
