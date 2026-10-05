@@ -156,6 +156,167 @@ class AppDb {
     WHERE substr(b.date,1,10)=? ORDER BY b.category,e.id
   ''',[day]);
 
+
+  Future<List<Map<String, Object?>>> getExpenditureCategorySummary({
+    DateTime? from,
+    DateTime? to,
+    String? fundName,
+    String? category,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+    if (from != null) {
+      where.add('b.date >= ?');
+      args.add(DateTime(from.year, from.month, from.day).toIso8601String());
+    }
+    if (to != null) {
+      where.add('b.date < ?');
+      args.add(DateTime(to.year, to.month, to.day + 1).toIso8601String());
+    }
+    if (fundName != null && fundName.trim().isNotEmpty) {
+      where.add('b.fund_name = ?');
+      args.add(fundName.trim());
+    }
+    if (category != null && category.isNotEmpty && category != 'ALL') {
+      where.add('b.category = ?');
+      args.add(category);
+    }
+    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    return db.rawQuery('''
+      SELECT b.category AS category,
+             COUNT(DISTINCT b.id) AS batches,
+             COUNT(e.id) AS entries,
+             COALESCE(SUM(e.amount), 0) AS total
+      FROM expenditure_batches b
+      JOIN expenditure_entries e ON e.batch_id = b.id
+      $whereSql
+      GROUP BY b.category
+      ORDER BY total DESC, b.category ASC
+    ''', args);
+  }
+
+  Future<List<Map<String, Object?>>> getExpenditureFundSummary({
+    DateTime? from,
+    DateTime? to,
+    String? category,
+    String? fundName,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+    if (from != null) {
+      where.add('b.date >= ?');
+      args.add(DateTime(from.year, from.month, from.day).toIso8601String());
+    }
+    if (to != null) {
+      where.add('b.date < ?');
+      args.add(DateTime(to.year, to.month, to.day + 1).toIso8601String());
+    }
+    if (category != null && category.isNotEmpty && category != 'ALL') {
+      where.add('b.category = ?');
+      args.add(category);
+    }
+    if (fundName != null && fundName.trim().isNotEmpty) {
+      where.add('b.fund_name = ?');
+      args.add(fundName.trim());
+    }
+    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    return db.rawQuery('''
+      SELECT COALESCE(NULLIF(TRIM(b.fund_name), ''), 'HAKUNA MFUKO ULIOCHAGULIWA') AS fund_name,
+             COUNT(DISTINCT b.id) AS batches,
+             COUNT(e.id) AS entries,
+             COALESCE(SUM(e.amount), 0) AS total
+      FROM expenditure_batches b
+      JOIN expenditure_entries e ON e.batch_id = b.id
+      $whereSql
+      GROUP BY COALESCE(NULLIF(TRIM(b.fund_name), ''), 'HAKUNA MFUKO ULIOCHAGULIWA')
+      ORDER BY total DESC, fund_name ASC
+    ''', args);
+  }
+
+  Future<List<Map<String, Object?>>> getExpenditureDailySummary({
+    DateTime? from,
+    DateTime? to,
+    String? fundName,
+    String? category,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+    if (from != null) {
+      where.add('b.date >= ?');
+      args.add(DateTime(from.year, from.month, from.day).toIso8601String());
+    }
+    if (to != null) {
+      where.add('b.date < ?');
+      args.add(DateTime(to.year, to.month, to.day + 1).toIso8601String());
+    }
+    if (fundName != null && fundName.trim().isNotEmpty) {
+      where.add('b.fund_name = ?');
+      args.add(fundName.trim());
+    }
+    if (category != null && category.isNotEmpty && category != 'ALL') {
+      where.add('b.category = ?');
+      args.add(category);
+    }
+    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    return db.rawQuery('''
+      SELECT substr(b.date, 1, 10) AS day,
+             COUNT(DISTINCT b.id) AS batches,
+             COUNT(e.id) AS entries,
+             COALESCE(SUM(e.amount), 0) AS total
+      FROM expenditure_batches b
+      JOIN expenditure_entries e ON e.batch_id = b.id
+      $whereSql
+      GROUP BY substr(b.date, 1, 10)
+      ORDER BY day ASC
+    ''', args);
+  }
+
+  Future<List<String>> getExpenditureFundNames() async {
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT TRIM(fund_name) AS fund_name
+      FROM expenditure_batches
+      WHERE fund_name IS NOT NULL AND TRIM(fund_name) <> ''
+      ORDER BY fund_name COLLATE NOCASE ASC
+    ''');
+    return rows.map((r) => '${r['fund_name']}'.trim()).where((v) => v.isNotEmpty).toList();
+  }
+
+  Future<Map<String, Object?>> getExpenditureOverallStats({
+    DateTime? from,
+    DateTime? to,
+    String? fundName,
+    String? category,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+    if (from != null) {
+      where.add('b.date >= ?');
+      args.add(DateTime(from.year, from.month, from.day).toIso8601String());
+    }
+    if (to != null) {
+      where.add('b.date < ?');
+      args.add(DateTime(to.year, to.month, to.day + 1).toIso8601String());
+    }
+    if (fundName != null && fundName.trim().isNotEmpty) {
+      where.add('b.fund_name = ?');
+      args.add(fundName.trim());
+    }
+    if (category != null && category.isNotEmpty && category != 'ALL') {
+      where.add('b.category = ?');
+      args.add(category);
+    }
+    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    final rows = await db.rawQuery('''
+      SELECT COUNT(DISTINCT b.id) AS batches,
+             COUNT(e.id) AS entries,
+             COALESCE(SUM(e.amount), 0) AS total
+      FROM expenditure_batches b
+      JOIN expenditure_entries e ON e.batch_id = b.id
+      $whereSql
+    ''', args);
+    return rows.isEmpty ? <String, Object?>{} : rows.first;
+  }
+
   Future<List<Map<String, Object?>>> getExpenditureBatches({
     String? search, DateTime? from, DateTime? to, String? category,
   }) async {
