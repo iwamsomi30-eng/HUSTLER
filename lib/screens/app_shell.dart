@@ -67,10 +67,21 @@ class _AppShellState extends State<AppShell> {
         );
         return Scaffold(
           key: _key,
-          drawer: wide ? null : Drawer(width: 260, child: sidebar),
+          drawer: wide
+              ? null
+              : Drawer(
+                  width: 260,
+                  backgroundColor: C.navyDark,
+                  surfaceTintColor: Colors.transparent,
+                  child: sidebar),
           body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (wide) SizedBox(width: 250, child: sidebar),
+              if (wide)
+                SizedBox(
+                    width: 250,
+                    height: double.infinity,
+                    child: sidebar),
               Expanded(
                 child: Column(
                   children: [
@@ -132,15 +143,22 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [C.navy, C.navyDark],
+    return Material(
+      color: C.navyDark, // rangi ya uhakika (haitegemei theme ya kifaa)
+      surfaceTintColor: Colors.transparent,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [C.navy, C.navyDark],
+          ),
         ),
-      ),
-      child: SafeArea(
+        child: IconTheme(
+          data: const IconThemeData(color: Colors.white),
+          child: DefaultTextStyle(
+            style: const TextStyle(color: Colors.white),
+            child: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -199,6 +217,9 @@ class _Sidebar extends StatelessWidget {
                       fontStyle: FontStyle.italic)),
             ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );
