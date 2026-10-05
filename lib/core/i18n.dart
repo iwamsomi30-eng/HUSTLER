@@ -1,0 +1,109 @@
+import 'package:flutter/foundation.dart';
+import 'db.dart';
+
+/// Lugha: Kiswahili ni default, English kwa kubonyeza kitufe juu kulia.
+class L10n extends ChangeNotifier {
+  L10n._();
+  static final L10n instance = L10n._();
+
+  String lang = 'sw';
+
+  Future<void> load() async {
+    lang = await AppDb.instance.getSetting('lang') ?? 'sw';
+  }
+
+  Future<void> setLang(String l) async {
+    lang = l;
+    await AppDb.instance.setSetting('lang', l);
+    notifyListeners();
+  }
+
+  String t(String key) => _s[lang]?[key] ?? _s['sw']![key] ?? key;
+
+  static const Map<String, Map<String, String>> _s = {
+    'sw': {
+      'app_name': 'MFUKO WA MAPATO YA KANISA',
+      'app_name_short': 'MFUKO WA\nMAPATO YA KANISA',
+      'tagline': 'Usimamizi wa Michango na Matumizi ya Kanisa',
+      'motto': 'Pamoja katika imani, tunajenga kazi ya Mungu',
+      'nav_dashboard': 'Dashboard',
+      'nav_michango_input': 'Maingizo ya Michango',
+      'nav_michango_records': 'Michango Records',
+      'nav_matumizi_input': 'Maingizo ya Matumizi',
+      'nav_matumizi_records': 'Matumizi Records',
+      'nav_muhtasari': 'Muhtasari wa Matumizi',
+      'nav_salio': 'Salio',
+      'nav_settings': 'Mipangilio',
+      'nav_about': 'Kuhusu Programu',
+      'logout': 'Toka',
+      'dash_title': 'Dashibodi ya Jumla',
+      'dash_sub': 'Muhtasari wa mapato na matumizi ya kanisa',
+      'makusanyo': 'Makusanyo',
+      'matumizi': 'Matumizi',
+      'salio': 'Salio',
+      'michango': 'Michango',
+      'dash_empty':
+          'Takwimu na grafu zitaonekana hapa kadri michango na matumizi yanavyoingizwa.',
+      'coming_soon': 'Ukurasa huu utajengwa katika Hatua ya',
+      'admin': 'Admin',
+      'admin_role': 'Msimamizi',
+      'create_pin': 'Tengeneza PIN',
+      'create_pin_sub': 'Weka PIN ya tarakimu 4 hadi 8 kulinda mfumo huu',
+      'enter_pin': 'Weka PIN',
+      'enter_pin_sub': 'Ingiza PIN yako kuendelea',
+      'pin': 'PIN',
+      'pin_confirm': 'Rudia PIN',
+      'pin_short': 'PIN iwe na tarakimu 4 hadi 8',
+      'pin_mismatch': 'PIN hazifanani',
+      'pin_wrong': 'PIN si sahihi',
+      'save_pin': 'Hifadhi PIN',
+      'login': 'Ingia',
+      'about_text':
+          'Mfumo wa offline wa kusimamia michango, matumizi na salio la kanisa.',
+      'version': 'Toleo',
+    },
+    'en': {
+      'app_name': 'CHURCH INCOME FUND',
+      'app_name_short': 'CHURCH\nINCOME FUND',
+      'tagline': 'Church Contributions and Expenditure Management',
+      'motto': 'Together in faith, we build God\'s work',
+      'nav_dashboard': 'Dashboard',
+      'nav_michango_input': 'Contributions Input',
+      'nav_michango_records': 'Contributions Records',
+      'nav_matumizi_input': 'Expenditure Input',
+      'nav_matumizi_records': 'Expenditure Records',
+      'nav_muhtasari': 'Expenditure Summary',
+      'nav_salio': 'Balance',
+      'nav_settings': 'Settings',
+      'nav_about': 'About',
+      'logout': 'Log out',
+      'dash_title': 'Overall Dashboard',
+      'dash_sub': 'Summary of church income and expenditure',
+      'makusanyo': 'Collections',
+      'matumizi': 'Expenditure',
+      'salio': 'Balance',
+      'michango': 'Contributions',
+      'dash_empty':
+          'Statistics and charts will appear here as contributions and expenditure are entered.',
+      'coming_soon': 'This page will be built in Stage',
+      'admin': 'Admin',
+      'admin_role': 'Administrator',
+      'create_pin': 'Create PIN',
+      'create_pin_sub': 'Set a 4 to 8 digit PIN to protect this system',
+      'enter_pin': 'Enter PIN',
+      'enter_pin_sub': 'Enter your PIN to continue',
+      'pin': 'PIN',
+      'pin_confirm': 'Confirm PIN',
+      'pin_short': 'PIN must be 4 to 8 digits',
+      'pin_mismatch': 'PINs do not match',
+      'pin_wrong': 'Incorrect PIN',
+      'save_pin': 'Save PIN',
+      'login': 'Log in',
+      'about_text':
+          'An offline system for managing church contributions, expenditure and balances.',
+      'version': 'Version',
+    },
+  };
+}
+
+String tr(String key) => L10n.instance.t(key);

@@ -1,0 +1,61 @@
+import 'package:flutter/material.dart';
+import '../core/i18n.dart';
+import '../core/theme.dart';
+
+/// Kitufe cha Kiswahili / English - kinaonekana kila page juu kulia.
+class LangToggle extends StatelessWidget {
+  final bool onDark;
+  const LangToggle({super.key, this.onDark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: L10n.instance,
+      builder: (context, _) {
+        final cur = L10n.instance.lang;
+        Widget chip(String code, String label) {
+          final sel = cur == code;
+          return InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => L10n.instance.setLang(code),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: sel ? C.teal : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                  color: sel ? Colors.white : (onDark ? Colors.white70 : C.text),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            border: Border.all(color: onDark ? Colors.white30 : C.border),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 2),
+                child: Icon(Icons.language,
+                    size: 17, color: onDark ? Colors.white70 : C.muted),
+              ),
+              chip('sw', 'Kiswahili'),
+              chip('en', 'English'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
