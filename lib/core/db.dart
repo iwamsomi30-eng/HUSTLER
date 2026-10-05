@@ -156,6 +156,87 @@ class AppDb {
     WHERE substr(b.date,1,10)=? ORDER BY b.category,e.id
   ''',[day]);
 
+  Future<List<Map<String, Object?>>> getExpenditureBatches({
+    String? search, DateTime? from, DateTime? to, String? category,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+    if (from != null) {
+      where.add('b.date >= ?');
+      args.add(DateTime(from.year, from.month, from.day).toIso8601String());
+    }
+    if (to != null) {
+      where.add('b.date < ?');
+      args.add(DateTime(to.year, to.month, to.day + 1).toIso8601String());
+    }
+    if (category != null && category.isNotEmpty && category != 'ALL') {
+      where.add('b.category = ?');
+      args.add(category);
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      where.add('(b.category LIKE ? OR b.fund_name LIKE ? OR b.note LIKE ? OR e.description LIKE ? OR e.payee LIKE ? OR e.reference LIKE ?)');
+      final q = '%${search.trim()}%';
+      args.addAll([q, q, q, q, q, q]);
+    }
+    final ws = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    return db.rawQuery('''
+      SELECT b.id, b.date, b.category, COALESCE(b.fund_name,'') AS fund_name,
+        COALESCE(b.note,'') AS note, b.created_at, COUNT(e.id) AS entries,
+        COALESCE(SUM(e.amount),0) AS total
+      FROM expenditure_batches b
+      JOIN expenditure_entries e ON e.batch_id=b.id
+      $ws
+      GROUP BY b.id
+      ORDER BY b.date DESC, b.id DESC
+    ''', args);
+  }
+
+  Future<List<Map<String, Object?>>> getExpenditureBatchDetails(int batchId) async =>
+      db.query('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId], orderBy: 'id ASC');
+
+  Future<void> updateExpenditureBatch({
+    required int batchId,
+    required String date,
+    required String category,
+    required String fundName,
+    required String note,
+    required List<Map<String, Object?>> rows,
+  }) async {
+    if (rows.isEmpty) throw ArgumentError('At least one expenditure row is required');
+    await db.transaction((txn) async {
+      await txn.update('expenditure_batches', {
+        'date': date,
+        'category': category,
+        'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
+        'note': note.trim().isEmpty ? null : note.trim(),
+      }, where: 'id = ?', whereArgs: [batchId]);
+      await txn.delete('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId]);
+      for (final row in rows) {
+        final amount = (row['amount'] as num).toDouble();
+        if ((row['description'] as String).trim().isEmpty || amount <= 0) {
+          throw ArgumentError('Description and positive amount are required');
+        }
+        await txn.insert('expenditure_entries', {
+          'batch_id': batchId,
+          'description': (row['description'] as String).trim(),
+          'payee': (row['payee'] as String?)?.trim().isEmpty == true ? null : (row['payee'] as String?)?.trim(),
+          'reference': (row['reference'] as String?)?.trim().isEmpty == true ? null : (row['reference'] as String?)?.trim(),
+          'amount': amount,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+    });
+    await audit('EXPENDITURE_UPDATED', 'batch=$batchId; rows=${rows.length}');
+  }
+
+  Future<void> deleteExpenditureBatch(int batchId) async {
+    await db.transaction((txn) async {
+      await txn.delete('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId]);
+      await txn.delete('expenditure_batches', where: 'id = ?', whereArgs: [batchId]);
+    });
+    await audit('EXPENDITURE_DELETED', 'batch=$batchId');
+  }
+
   static Future<void> auditDb(Database db, String action, String detail) async {
     await db.insert('audit_log', {
       'at': DateTime.now().toIso8601String(),
