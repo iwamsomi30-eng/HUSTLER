@@ -35,6 +35,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   DateTime _date = DateTime.now();
   final _otherName = TextEditingController();
   final _dateLabel = TextEditingController();
+  final _fundName = TextEditingController();
   ContributionKind _kind = ContributionKind.fungu;
 
   final List<ContributionRow> _funguI = [ContributionRow()];
@@ -52,6 +53,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   void dispose() {
     _otherName.dispose();
     _dateLabel.dispose();
+    _fundName.dispose();
     super.dispose();
   }
 
@@ -99,6 +101,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   }
 
   Future<void> _saveFungu(int service, List<ContributionRow> rows) async {
+    if (_fundName.text.trim().isEmpty) { _snack(tr('fund_required'), error: true); return; }
     final valid = rows.where((r) => r.envelopeNo.trim().isNotEmpty || r.amount.trim().isNotEmpty).toList();
     if (valid.isEmpty) {
       _snack(tr('add_at_least_one'), error: true);
@@ -117,6 +120,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
         date: _date.toIso8601String(),
         service: service,
         title: 'Fungu',
+        fundName: _fundName.text,
         rows: [
           for (final row in valid)
             {
@@ -146,6 +150,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
 
   Future<void> _saveOther(int service, List<ContributionRow> rows) async {
     final title = _otherName.text.trim();
+    if (_fundName.text.trim().isEmpty) { _snack(tr('fund_required'), error: true); return; }
     if (title.isEmpty) {
       _snack(tr('other_name_required'), error: true);
       return;
@@ -168,6 +173,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
         date: _date.toIso8601String(),
         service: service,
         title: title,
+        fundName: _fundName.text,
         rows: [
           for (final row in valid)
             {
@@ -323,6 +329,11 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
       child: LayoutBuilder(
         builder: (context, c) {
           final narrow = c.maxWidth < 720;
+          final fund = TextField(
+            controller: _fundName,
+            decoration: _input(tr('fund_name'), Icons.account_balance_wallet_outlined),
+            textInputAction: TextInputAction.next,
+          );
           final date = TextField(
             controller: _dateLabel,
             readOnly: true,
@@ -353,13 +364,15 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                fund,
+                const SizedBox(height: 12),
                 date,
                 const SizedBox(height: 12),
                 kind,
               ],
             );
           }
-          return Row(children: [Expanded(child: date), const SizedBox(width: 14), Expanded(child: kind)]);
+          return Column(children: [Row(children: [Expanded(child: fund), const SizedBox(width: 14), Expanded(child: date)]), const SizedBox(height: 14), kind]);
         },
       ),
     );
