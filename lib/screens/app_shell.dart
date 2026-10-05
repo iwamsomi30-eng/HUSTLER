@@ -5,6 +5,7 @@ import '../widgets/lang_toggle.dart';
 import 'dashboard_page.dart';
 import 'contribution_input_page.dart';
 import 'contribution_records_page.dart';
+import 'expenditure_input_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -50,6 +51,7 @@ class _AppShellState extends State<AppShell> {
     if (_index == 0) return const DashboardPage();
     if (_index == 1) return const ContributionInputPage();
     if (_index == 2) return const ContributionRecordsPage();
+    if (_index == 3) return const ExpenditureInputPage();
     if (_index == 8) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
@@ -67,21 +69,10 @@ class _AppShellState extends State<AppShell> {
         );
         return Scaffold(
           key: _key,
-          drawer: wide
-              ? null
-              : Drawer(
-                  width: 260,
-                  backgroundColor: C.navyDark,
-                  surfaceTintColor: Colors.transparent,
-                  child: sidebar),
+          drawer: wide ? null : Drawer(width: 260, child: sidebar),
           body: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (wide)
-                SizedBox(
-                    width: 250,
-                    height: double.infinity,
-                    child: sidebar),
+              if (wide) SizedBox(width: 250, child: sidebar),
               Expanded(
                 child: Column(
                   children: [
@@ -143,22 +134,15 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: C.navyDark, // rangi ya uhakika (haitegemei theme ya kifaa)
-      surfaceTintColor: Colors.transparent,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [C.navy, C.navyDark],
-          ),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [C.navy, C.navyDark],
         ),
-        child: IconTheme(
-          data: const IconThemeData(color: Colors.white),
-          child: DefaultTextStyle(
-            style: const TextStyle(color: Colors.white),
-            child: SafeArea(
+      ),
+      child: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -217,9 +201,6 @@ class _Sidebar extends StatelessWidget {
                       fontStyle: FontStyle.italic)),
             ),
           ],
-        ),
-            ),
-          ),
         ),
       ),
     );
