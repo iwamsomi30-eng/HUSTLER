@@ -9,6 +9,7 @@ import 'expenditure_input_page.dart';
 import 'expenditure_records_page.dart';
 import 'expenditure_summary_page.dart';
 import 'balance_page.dart';
+import 'sync_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -27,6 +28,7 @@ const _navMain = [
   _Nav(Icons.account_balance_wallet, 'nav_salio', 7),
 ];
 const _navBottom = [
+  _Nav(Icons.sync_rounded, 'nav_sync', 9),
   _Nav(Icons.settings, 'nav_settings', 10),
   _Nav(Icons.info_outline, 'nav_about', 0),
 ];
@@ -41,7 +43,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   final _key = GlobalKey<ScaffoldState>();
-  int _index = 0; // 0..6 main, 7 settings, 8 about
+  int _index = 0; // 0..6 main, 7 sync, 8 settings, 9 about
 
   _Nav get _cur => _index < 7 ? _navMain[_index] : _navBottom[_index - 7];
 
@@ -58,7 +60,8 @@ class _AppShellState extends State<AppShell> {
     if (_index == 4) return const ExpenditureRecordsPage();
     if (_index == 5) return const ExpenditureSummaryPage();
     if (_index == 6) return const BalancePage();
-    if (_index == 8) return const _AboutPage();
+    if (_index == 7) return const SyncPage();
+    if (_index == 9) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
 
