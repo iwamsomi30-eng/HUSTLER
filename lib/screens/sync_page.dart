@@ -58,12 +58,12 @@ class _SyncPageState extends State<SyncPage> {
         SizedBox(width:c.maxWidth>700?530:c.maxWidth,child:_card(context,Icons.input_rounded,tr('sync_receive_title'),tr('sync_receive_sub'),_receivePanel(context))),
       ]),
       const SizedBox(height:16), _info(context),
-    ]))));
+    ])))));
   }
 
   Widget _card(BuildContext context,IconData icon,String title,String sub,Widget child)=>Card(elevation:1,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(18)),child:Padding(padding:const EdgeInsets.all(20),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[Container(width:44,height:44,decoration:BoxDecoration(color:C.navy.withOpacity(.08),borderRadius:BorderRadius.circular(12)),child:Icon(icon,color:C.navy)),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:17)),const SizedBox(height:3),Text(sub,style:TextStyle(color:Colors.grey.shade700,fontSize:13))]))]),
-    const SizedBox(height:18),child]));
+    const SizedBox(height:18),child])));
 
   Widget _sendPanel(BuildContext context)=>Column(children:[
     Row(children:[Expanded(child:Text('${tr('sync_device_id')}: ${_deviceId??'…'}',style:const TextStyle(fontSize:12))),IconButton(onPressed:_load,icon:const Icon(Icons.refresh))]),
