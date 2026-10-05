@@ -4,6 +4,7 @@ import '../core/theme.dart';
 import '../widgets/lang_toggle.dart';
 import 'dashboard_page.dart';
 import 'contribution_input_page.dart';
+import 'contribution_records_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -48,6 +49,7 @@ class _AppShellState extends State<AppShell> {
   Widget _page() {
     if (_index == 0) return const DashboardPage();
     if (_index == 1) return const ContributionInputPage();
+    if (_index == 2) return const ContributionRecordsPage();
     if (_index == 8) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
