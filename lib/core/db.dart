@@ -22,7 +22,7 @@ class AppDb {
     final path = p.join(dir.path, 'mfuko_wa_kanisa.db');
     _db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)');
@@ -33,11 +33,16 @@ class AppDb {
             action TEXT NOT NULL,
             detail TEXT)''');
         await _createContributionTables(db);
+        await _createExpenditureTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await _createContributionTables(db);
           await auditDb(db, 'DB_UPGRADED', 'schema=2');
+        }
+        if (oldVersion < 3) {
+          await _createExpenditureTables(db);
+          await auditDb(db, 'DB_UPGRADED', 'schema=3');
         }
       },
     );
@@ -83,6 +88,73 @@ class AppDb {
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_other_batch ON other_contributions(batch_id)');
   }
+
+  static Future<void> _createExpenditureTables(Database db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS expenditure_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      fund_name TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS expenditure_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      payee TEXT,
+      reference TEXT,
+      amount REAL NOT NULL CHECK(amount > 0),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(batch_id) REFERENCES expenditure_batches(id) ON DELETE CASCADE
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenditure_batches_date ON expenditure_batches(date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenditure_batches_category ON expenditure_batches(category)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenditure_entries_batch ON expenditure_entries(batch_id)');
+  }
+
+  Future<int> saveExpenditureBatch({
+    required String date, required String category, required String fundName,
+    required String note, required List<Map<String, Object?>> rows,
+  }) async {
+    if (rows.isEmpty) throw ArgumentError('At least one expenditure row is required');
+    return db.transaction<int>((txn) async {
+      final batchId = await txn.insert('expenditure_batches', {
+        'date': date, 'category': category,
+        'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
+        'note': note.trim().isEmpty ? null : note.trim(),
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      for (final row in rows) {
+        await txn.insert('expenditure_entries', {
+          'batch_id': batchId,
+          'description': row['description'],
+          'payee': (row['payee'] as String?)?.trim().isEmpty == true ? null : (row['payee'] as String?)?.trim(),
+          'reference': (row['reference'] as String?)?.trim().isEmpty == true ? null : (row['reference'] as String?)?.trim(),
+          'amount': row['amount'],
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+      return batchId;
+    });
+  }
+
+  Future<List<Map<String, Object?>>> getExpenditureSummary({String? search, DateTime? from, DateTime? to}) async {
+    final where=<String>[]; final args=<Object?>[];
+    if(from!=null){where.add('b.date >= ?'); args.add(DateTime(from.year,from.month,from.day).toIso8601String());}
+    if(to!=null){where.add('b.date < ?'); args.add(DateTime(to.year,to.month,to.day+1).toIso8601String());}
+    if(search!=null && search.trim().isNotEmpty){where.add('(b.category LIKE ? OR b.fund_name LIKE ? OR e.description LIKE ? OR e.payee LIKE ? OR e.reference LIKE ?)'); final q='%${search.trim()}%'; args.addAll([q,q,q,q,q]);}
+    final ws=where.isEmpty?'':'WHERE ${where.join(' AND ')}';
+    return db.rawQuery('''SELECT substr(b.date,1,10) day, b.category, COALESCE(b.fund_name,'') fund_name, COUNT(e.id) entries, COALESCE(SUM(e.amount),0) total
+      FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $ws
+      GROUP BY substr(b.date,1,10), b.category, b.fund_name ORDER BY day DESC, b.category''', args);
+  }
+
+  Future<List<Map<String, Object?>>> getExpenditureDetailsForDay(String day) async => db.rawQuery('''
+    SELECT b.id batch_id,b.date,b.category,b.fund_name,b.note,b.created_at,e.id row_id,e.description,e.payee,e.reference,e.amount
+    FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id
+    WHERE substr(b.date,1,10)=? ORDER BY b.category,e.id
+  ''',[day]);
 
   static Future<void> auditDb(Database db, String action, String detail) async {
     await db.insert('audit_log', {
