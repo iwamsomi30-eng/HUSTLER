@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'core/auth.dart';
 import 'core/db.dart';
@@ -5,11 +6,18 @@ import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'screens/app_shell.dart';
 import 'screens/login_screen.dart';
+import 'services/cloud_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDb.instance.init();
+  await CloudService.initialize();
   await L10n.instance.load();
+  Timer.periodic(const Duration(minutes: 1), (_) async {
+    if (CloudService.available && CloudService.user != null) {
+      try { await CloudService.sync(); } catch (_) {}
+    }
+  });
   runApp(const MfukoApp());
 }
 
