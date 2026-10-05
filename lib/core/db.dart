@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uuid/uuid.dart';
 
 /// Database ya ndani (offline). Schema ina settings, audit log na data ya michango ya Stage 2.
 class AppDb {
@@ -22,7 +23,7 @@ class AppDb {
     final path = p.join(dir.path, 'mfuko_wa_kanisa.db');
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)');
@@ -35,6 +36,7 @@ class AppDb {
         await _createContributionTables(db);
         await _createExpenditureTables(db);
         await _addFundToContributions(db);
+        await _addSyncSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -48,6 +50,10 @@ class AppDb {
         if (oldVersion < 4) {
           await _addFundToContributions(db);
           await auditDb(db, 'DB_UPGRADED', 'schema=4; fund ledger');
+        }
+        if (oldVersion < 5) {
+          await _addSyncSchema(db);
+          await auditDb(db, 'DB_UPGRADED', 'schema=5; secure cloud sync');
         }
       },
     );
@@ -125,7 +131,94 @@ class AppDb {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_expenditure_entries_batch ON expenditure_entries(batch_id)');
   }
 
+  static const _uuid = Uuid();
+  static const _syncTables = <String>[
+    'contribution_batches', 'fungu_contributions', 'other_contributions',
+    'expenditure_batches', 'expenditure_entries'
+  ];
+
+  static Future<void> _addSyncSchema(Database db) async {
+    await db.execute("""CREATE TABLE IF NOT EXISTS sync_tombstones (
+      entity_type TEXT NOT NULL,
+      sync_id TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY(entity_type, sync_id)
+    )""");
+    for (final table in _syncTables) {
+      final cols = await db.rawQuery('PRAGMA table_info($table)');
+      final names = cols.map((r) => '${r['name']}').toSet();
+      if (!names.contains('sync_id')) await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT');
+      if (!names.contains('updated_at')) await db.execute('ALTER TABLE $table ADD COLUMN updated_at TEXT');
+      final rows = await db.query(table, columns: ['id','sync_id','created_at','updated_at']);
+      for (final r in rows) {
+        if (r['sync_id'] == null || '${r['sync_id']}'.isEmpty) await db.update(table, {'sync_id': _uuid.v4()}, where: 'id=?', whereArgs: [r['id']]);
+        if (r['updated_at'] == null) await db.update(table, {'updated_at': r['created_at'] ?? DateTime.now().toUtc().toIso8601String()}, where: 'id=?', whereArgs: [r['id']]);
+      }
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_sync_id ON $table(sync_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_${table}_updated_at ON $table(updated_at)');
+    }
+  }
+
+  String _now() => DateTime.now().toUtc().toIso8601String();
+
+  Future<void> _ensureWritable() async {
+    final role = await getSetting('cloud_role');
+    if (role == 'viewer') throw StateError('READ_ONLY_ACCESS');
+  }
+
+  Future<String> _newSyncId() async => _uuid.v4();
+
+  Future<List<Map<String, Object?>>> syncRows({DateTime? since}) async {
+    final out = <Map<String,Object?>>[];
+    for (final table in _syncTables) {
+      final rows = await db.query(table, where: since == null ? null : 'updated_at > ?', whereArgs: since == null ? null : [since.toUtc().toIso8601String()]);
+      for (final row in rows) {
+        final payload = Map<String,dynamic>.from(row);
+        payload.remove('id'); payload.remove('sync_id'); payload.remove('updated_at');
+        if (table == 'fungu_contributions' || table == 'other_contributions' || table == 'expenditure_entries') {
+          final parentTable = table == 'expenditure_entries' ? 'expenditure_batches' : 'contribution_batches';
+          final parent = await db.query(parentTable, columns: ['sync_id'], where: 'id=?', whereArgs: [row['batch_id']], limit: 1);
+          payload['parent_sync_id'] = parent.isEmpty ? null : parent.first['sync_id'];
+        }
+        out.add({'entity_type': table, 'sync_id': row['sync_id'], 'updated_at': row['updated_at'], 'deleted': false, 'payload': payload});
+      }
+    }
+    for (final t in await db.query('sync_tombstones', where: since == null ? null : 'deleted_at > ?', whereArgs: since == null ? null : [since.toUtc().toIso8601String()])) {
+      out.add({'entity_type': t['entity_type'], 'sync_id': t['sync_id'], 'updated_at': t['deleted_at'], 'deleted': true, 'payload': <String,dynamic>{}});
+    }
+    return out;
+  }
+
+  Future<bool> applyRemoteSyncRow({required String entityType, required String syncId, required String updatedAt, required bool deleted, required Map<String,dynamic> payload}) async {
+    if (!_syncTables.contains(entityType)) return false;
+    final table = entityType;
+    final local = await db.query(table, where: 'sync_id=?', whereArgs: [syncId], limit: 1);
+    final localUpdated = local.isEmpty ? null : DateTime.tryParse('${local.first['updated_at'] ?? ''}');
+    final remoteUpdated = DateTime.tryParse(updatedAt);
+    if (localUpdated != null && remoteUpdated != null && !remoteUpdated.isAfter(localUpdated)) return false;
+    if (deleted) {
+      if (local.isNotEmpty) await db.delete(table, where: 'sync_id=?', whereArgs: [syncId]);
+      await db.insert('sync_tombstones', {'entity_type': table, 'sync_id': syncId, 'deleted_at': updatedAt}, conflictAlgorithm: ConflictAlgorithm.replace);
+      return local.isNotEmpty;
+    }
+    final data = Map<String,dynamic>.from(payload)..remove('parent_sync_id');
+    data['sync_id'] = syncId; data['updated_at'] = updatedAt;
+    if (table == 'fungu_contributions' || table == 'other_contributions' || table == 'expenditure_entries') {
+      final parentSync = payload['parent_sync_id'];
+      if (parentSync == null) return false;
+      final parentTable = table == 'expenditure_entries' ? 'expenditure_batches' : 'contribution_batches';
+      final parent = await db.query(parentTable, columns: ['id'], where: 'sync_id=?', whereArgs: [parentSync], limit: 1);
+      if (parent.isEmpty) return false;
+      data['batch_id'] = parent.first['id'];
+    }
+    data.remove('id');
+    if (local.isEmpty) await db.insert(table, data); else await db.update(table, data, where: 'sync_id=?', whereArgs: [syncId]);
+    await db.delete('sync_tombstones', where: 'entity_type=? AND sync_id=?', whereArgs: [table, syncId]);
+    return true;
+  }
+
   Future<int> saveExpenditureBatch({
+    await _ensureWritable();
     required String date, required String category, required String fundName,
     required String note, required List<Map<String, Object?>> rows,
   }) async {
@@ -136,6 +229,7 @@ class AppDb {
         'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'note': note.trim().isEmpty ? null : note.trim(),
         'created_at': DateTime.now().toIso8601String(),
+        'sync_id': _uuid.v4(), 'updated_at': _now(),
       });
       for (final row in rows) {
         await txn.insert('expenditure_entries', {
@@ -145,6 +239,7 @@ class AppDb {
           'reference': (row['reference'] as String?)?.trim().isEmpty == true ? null : (row['reference'] as String?)?.trim(),
           'amount': row['amount'],
           'created_at': DateTime.now().toIso8601String(),
+          'sync_id': _uuid.v4(), 'updated_at': _now(),
         });
       }
       return batchId;
@@ -375,14 +470,21 @@ class AppDb {
     required String note,
     required List<Map<String, Object?>> rows,
   }) async {
+    await _ensureWritable();
     if (rows.isEmpty) throw ArgumentError('At least one expenditure row is required');
     await db.transaction((txn) async {
+      final now = _now();
       await txn.update('expenditure_batches', {
         'date': date,
         'category': category,
         'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'note': note.trim().isEmpty ? null : note.trim(),
+        'updated_at': now,
       }, where: 'id = ?', whereArgs: [batchId]);
+      final oldEntries = await txn.query('expenditure_entries', columns: ['sync_id'], where: 'batch_id=?', whereArgs: [batchId]);
+      for (final old in oldEntries) {
+        await txn.insert('sync_tombstones', {'entity_type':'expenditure_entries','sync_id':old['sync_id'],'deleted_at':now}, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
       await txn.delete('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId]);
       for (final row in rows) {
         final amount = (row['amount'] as num).toDouble();
@@ -396,6 +498,7 @@ class AppDb {
           'reference': (row['reference'] as String?)?.trim().isEmpty == true ? null : (row['reference'] as String?)?.trim(),
           'amount': amount,
           'created_at': DateTime.now().toIso8601String(),
+          'sync_id': _uuid.v4(), 'updated_at': _now(),
         });
       }
     });
@@ -403,7 +506,13 @@ class AppDb {
   }
 
   Future<void> deleteExpenditureBatch(int batchId) async {
+    await _ensureWritable();
+    final now = _now();
     await db.transaction((txn) async {
+      final batch = await txn.query('expenditure_batches', columns: ['sync_id'], where: 'id=?', whereArgs: [batchId], limit: 1);
+      final entries = await txn.query('expenditure_entries', columns: ['sync_id'], where: 'batch_id=?', whereArgs: [batchId]);
+      for (final r in entries) await txn.insert('sync_tombstones', {'entity_type':'expenditure_entries','sync_id':r['sync_id'],'deleted_at':now}, conflictAlgorithm: ConflictAlgorithm.replace);
+      for (final r in batch) await txn.insert('sync_tombstones', {'entity_type':'expenditure_batches','sync_id':r['sync_id'],'deleted_at':now}, conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.delete('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId]);
       await txn.delete('expenditure_batches', where: 'id = ?', whereArgs: [batchId]);
     });
@@ -522,12 +631,14 @@ class AppDb {
     required int service,
     required String title,
   }) async {
+    await _ensureWritable();
     return db.insert('contribution_batches', {
       'date': date,
       'type': type,
       'service': service,
       'title': title,
       'created_at': DateTime.now().toIso8601String(),
+      'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
   }
 
@@ -538,6 +649,7 @@ class AppDb {
     required String fundName,
     required List<Map<String, Object?>> rows,
   }) async {
+    await _ensureWritable();
     return db.transaction<int>((txn) async {
       final batchId = await txn.insert('contribution_batches', {
         'date': date,
@@ -546,6 +658,7 @@ class AppDb {
         'title': title,
         'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'created_at': DateTime.now().toIso8601String(),
+        'sync_id': _uuid.v4(), 'updated_at': _now(),
       });
       for (final row in rows) {
         await txn.insert('fungu_contributions', {
@@ -556,6 +669,7 @@ class AppDb {
           'amount': row['amount'],
           'receipt_no': row['receiptNo'],
           'created_at': DateTime.now().toIso8601String(),
+          'sync_id': _uuid.v4(), 'updated_at': _now(),
         });
       }
       return batchId;
@@ -569,6 +683,7 @@ class AppDb {
     required String fundName,
     required List<Map<String, Object?>> rows,
   }) async {
+    await _ensureWritable();
     return db.transaction<int>((txn) async {
       final batchId = await txn.insert('contribution_batches', {
         'date': date,
@@ -577,6 +692,7 @@ class AppDb {
         'title': title,
         'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'created_at': DateTime.now().toIso8601String(),
+        'sync_id': _uuid.v4(), 'updated_at': _now(),
       });
       final countRows =
           await txn.rawQuery('SELECT COUNT(*) AS c FROM other_contributions');
@@ -593,6 +709,7 @@ class AppDb {
           'amount': row['amount'],
           'receipt_no': row['receiptNo'],
           'created_at': DateTime.now().toIso8601String(),
+          'sync_id': _uuid.v4(), 'updated_at': _now(),
         });
       }
       return batchId;
@@ -615,6 +732,7 @@ class AppDb {
       'amount': amount,
       'receipt_no': receiptNo,
       'created_at': DateTime.now().toIso8601String(),
+      'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
   }
 
@@ -636,6 +754,7 @@ class AppDb {
       'amount': amount,
       'receipt_no': receiptNo,
       'created_at': DateTime.now().toIso8601String(),
+      'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
   }
 
@@ -704,22 +823,26 @@ class AppDb {
   }
 
   Future<int> updateFunguContribution({required int id, required String envelopeNo, required String donorName, required String contact, required double amount}) async {
+    await _ensureWritable();
     final count = await db.update('fungu_contributions', {
       'envelope_no': envelopeNo.trim(),
       'donor_name': donorName.trim().isEmpty ? null : donorName.trim(),
       'contact': contact.trim().isEmpty ? null : contact.trim(),
       'amount': amount,
+      'updated_at': _now(),
     }, where: 'id = ?', whereArgs: [id]);
     await audit('CONTRIBUTION_FUNGU_UPDATED', 'id=$id; amount=$amount');
     return count;
   }
 
   Future<int> updateOtherContribution({required int id, required String contributionName, required String donorName, required String contact, required double amount}) async {
+    await _ensureWritable();
     final count = await db.update('other_contributions', {
       'contribution_name': contributionName.trim(),
       'donor_name': donorName.trim(),
       'contact': contact.trim().isEmpty ? null : contact.trim(),
       'amount': amount,
+      'updated_at': _now(),
     }, where: 'id = ?', whereArgs: [id]);
     await audit('CONTRIBUTION_OTHER_UPDATED', 'id=$id; amount=$amount');
     return count;
