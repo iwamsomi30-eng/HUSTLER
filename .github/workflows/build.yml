@@ -19,6 +19,9 @@ jobs:
           channel: stable
       - name: Tengeneza folder la Android
         run: flutter create --platforms=android --project-name mfuko_wa_kanisa --org tz.mfuko .
+      - name: Ruhusu internet kwa cloud sync
+        shell: bash
+        run: sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
       - name: Jina la app
         run: sed -i 's/android:label="[^"]*"/android:label="Mfuko wa Mapato ya Kanisa"/' android/app/src/main/AndroidManifest.xml
       - name: Lazimisha compileSdk 36 kwa plugins zote
@@ -50,7 +53,7 @@ jobs:
           EOF
           fi
       - run: flutter pub get
-      - run: flutter build apk --release
+      - run: flutter build apk --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: mfuko-android-apk
@@ -69,7 +72,7 @@ jobs:
         shell: bash
         run: sed -i 's/L"mfuko_wa_kanisa"/L"MFUKO WA MAPATO YA KANISA"/' windows/runner/main.cpp
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: mfuko-windows-app
