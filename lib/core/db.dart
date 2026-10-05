@@ -22,7 +22,7 @@ class AppDb {
     final path = p.join(dir.path, 'mfuko_wa_kanisa.db');
     _db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)');
@@ -34,6 +34,7 @@ class AppDb {
             detail TEXT)''');
         await _createContributionTables(db);
         await _createExpenditureTables(db);
+        await _addFundToContributions(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -43,6 +44,10 @@ class AppDb {
         if (oldVersion < 3) {
           await _createExpenditureTables(db);
           await auditDb(db, 'DB_UPGRADED', 'schema=3');
+        }
+        if (oldVersion < 4) {
+          await _addFundToContributions(db);
+          await auditDb(db, 'DB_UPGRADED', 'schema=4; fund ledger');
         }
       },
     );
@@ -87,6 +92,13 @@ class AppDb {
         'CREATE INDEX IF NOT EXISTS idx_fungu_batch ON fungu_contributions(batch_id)');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_other_batch ON other_contributions(batch_id)');
+  }
+
+  static Future<void> _addFundToContributions(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(contribution_batches)');
+    final exists = cols.any((r) => '${r['name']}' == 'fund_name');
+    if (!exists) await db.execute('ALTER TABLE contribution_batches ADD COLUMN fund_name TEXT');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_contribution_batches_fund ON contribution_batches(fund_name)');
   }
 
   static Future<void> _createExpenditureTables(Database db) async {
@@ -398,6 +410,47 @@ class AppDb {
     await audit('EXPENDITURE_DELETED', 'batch=$batchId');
   }
 
+  Future<Map<String, Object?>> getBalanceOverallStats({DateTime? from, DateTime? to, String? fundName}) async {
+    final c = await _contributionTotal(from: from, to: to, fundName: fundName);
+    final e = await _expenditureTotal(from: from, to: to, fundName: fundName);
+    final income = (c['total'] as num?)?.toDouble() ?? 0;
+    final expense = (e['total'] as num?)?.toDouble() ?? 0;
+    return {'income': income, 'expenditure': expense, 'balance': income - expense, 'contributionEntries': c['entries'] ?? 0, 'expenditureEntries': e['entries'] ?? 0};
+  }
+
+  Future<List<Map<String, Object?>>> getFundBalances({DateTime? from, DateTime? to}) async {
+    final wc=<String>[]; final ac=<Object?>[]; final we=<String>[]; final ae=<Object?>[];
+    if(from!=null){final v=DateTime(from.year,from.month,from.day).toIso8601String();wc.add('b.date >= ?');ac.add(v);we.add('b.date >= ?');ae.add(v);}
+    if(to!=null){final v=DateTime(to.year,to.month,to.day+1).toIso8601String();wc.add('b.date < ?');ac.add(v);we.add('b.date < ?');ae.add(v);}
+    final sc=wc.isEmpty?'':'WHERE ${wc.join(' AND ')}'; final se=we.isEmpty?'':'WHERE ${we.join(' AND ')}';
+    final rows=await db.rawQuery('''SELECT fund_name, SUM(income) income, SUM(expenditure) expenditure FROM (
+      SELECT COALESCE(NULLIF(TRIM(b.fund_name),''),'HAJAWEKWA') fund_name, SUM(x.amount) income, 0 expenditure FROM contribution_batches b JOIN (SELECT batch_id, amount FROM fungu_contributions UNION ALL SELECT batch_id, amount FROM other_contributions) x ON x.batch_id=b.id $sc GROUP BY fund_name
+      UNION ALL
+      SELECT COALESCE(NULLIF(TRIM(b.fund_name),''),'HAJAWEKWA') fund_name, 0 income, SUM(e.amount) expenditure FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $se GROUP BY fund_name
+    ) GROUP BY fund_name ORDER BY fund_name COLLATE NOCASE''',[...ac,...ae]);
+    return rows.map((r){final income=(r['income'] as num?)?.toDouble()??0;final exp=(r['expenditure'] as num?)?.toDouble()??0;return {...r,'income':income,'expenditure':exp,'balance':income-exp};}).toList();
+  }
+
+  Future<List<Map<String,Object?>>> getBalanceExpenditureByCategory({DateTime? from, DateTime? to, String? fundName}) async {
+    final w=<String>[]; final a=<Object?>[]; if(from!=null){w.add('b.date >= ?');a.add(DateTime(from.year,from.month,from.day).toIso8601String());} if(to!=null){w.add('b.date < ?');a.add(DateTime(to.year,to.month,to.day+1).toIso8601String());} if(fundName!=null&&fundName.trim().isNotEmpty){w.add('b.fund_name = ?');a.add(fundName.trim());} final ws=w.isEmpty?'':'WHERE ${w.join(' AND ')}';
+    return db.rawQuery('SELECT b.category category, COALESCE(SUM(e.amount),0) total FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $ws GROUP BY b.category ORDER BY total DESC',a);
+  }
+
+  Future<List<String>> getBalanceFundNames() async {
+    final rows=await db.rawQuery("SELECT fund_name FROM (SELECT DISTINCT TRIM(fund_name) fund_name FROM contribution_batches WHERE fund_name IS NOT NULL AND TRIM(fund_name)<>'' UNION SELECT DISTINCT TRIM(fund_name) fund_name FROM expenditure_batches WHERE fund_name IS NOT NULL AND TRIM(fund_name)<>'') ORDER BY fund_name COLLATE NOCASE");
+    return rows.map((r)=>'${r['fund_name']}'.trim()).where((x)=>x.isNotEmpty).toList();
+  }
+
+  Future<Map<String,Object?>> _contributionTotal({DateTime? from, DateTime? to, String? fundName}) async {
+    final w=<String>[]; final a=<Object?>[]; if(from!=null){w.add('b.date >= ?');a.add(DateTime(from.year,from.month,from.day).toIso8601String());} if(to!=null){w.add('b.date < ?');a.add(DateTime(to.year,to.month,to.day+1).toIso8601String());} if(fundName!=null&&fundName.trim().isNotEmpty){w.add('b.fund_name = ?');a.add(fundName.trim());} final ws=w.isEmpty?'':'WHERE ${w.join(' AND ')}';
+    final r=await db.rawQuery('SELECT COUNT(*) entries, COALESCE(SUM(amount),0) total FROM (SELECT b.id,x.amount FROM contribution_batches b JOIN fungu_contributions x ON x.batch_id=b.id $ws UNION ALL SELECT b.id,x.amount FROM contribution_batches b JOIN other_contributions x ON x.batch_id=b.id $ws)',[...a,...a]); return r.first;
+  }
+
+  Future<Map<String,Object?>> _expenditureTotal({DateTime? from, DateTime? to, String? fundName}) async {
+    final w=<String>[]; final a=<Object?>[]; if(from!=null){w.add('b.date >= ?');a.add(DateTime(from.year,from.month,from.day).toIso8601String());} if(to!=null){w.add('b.date < ?');a.add(DateTime(to.year,to.month,to.day+1).toIso8601String());} if(fundName!=null&&fundName.trim().isNotEmpty){w.add('b.fund_name = ?');a.add(fundName.trim());} final ws=w.isEmpty?'':'WHERE ${w.join(' AND ')}';
+    final r=await db.rawQuery('SELECT COUNT(e.id) entries, COALESCE(SUM(e.amount),0) total FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $ws',a); return r.first;
+  }
+
   static Future<void> auditDb(Database db, String action, String detail) async {
     await db.insert('audit_log', {
       'at': DateTime.now().toIso8601String(),
@@ -425,6 +478,7 @@ class AppDb {
     required String date,
     required int service,
     required String title,
+    required String fundName,
     required List<Map<String, Object?>> rows,
   }) async {
     return db.transaction<int>((txn) async {
@@ -433,6 +487,7 @@ class AppDb {
         'type': 'FUNGU',
         'service': service,
         'title': title,
+        'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'created_at': DateTime.now().toIso8601String(),
       });
       for (final row in rows) {
@@ -454,6 +509,7 @@ class AppDb {
     required String date,
     required int service,
     required String title,
+    required String fundName,
     required List<Map<String, Object?>> rows,
   }) async {
     return db.transaction<int>((txn) async {
@@ -462,6 +518,7 @@ class AppDb {
         'type': 'OTHER',
         'service': service,
         'title': title,
+        'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
         'created_at': DateTime.now().toIso8601String(),
       });
       final countRows =
