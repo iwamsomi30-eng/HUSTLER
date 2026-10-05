@@ -441,6 +441,63 @@ class AppDb {
     return rows.map((r)=>'${r['fund_name']}'.trim()).where((x)=>x.isNotEmpty).toList();
   }
 
+
+  Future<Map<String, Object?>> getOverallDashboardStats({DateTime? from, DateTime? to, String? fundName}) async {
+    final c = await _contributionTotal(from: from, to: to, fundName: fundName);
+    final e = await _expenditureTotal(from: from, to: to, fundName: fundName);
+    final income = (c['total'] as num?)?.toDouble() ?? 0;
+    final expenditure = (e['total'] as num?)?.toDouble() ?? 0;
+    return {'income': income, 'expenditure': expenditure, 'balance': income - expenditure, 'contributionEntries': c['entries'] ?? 0, 'expenditureEntries': e['entries'] ?? 0};
+  }
+
+  Future<List<Map<String, Object?>>> getOverallContributionBreakdown({DateTime? from, DateTime? to, String? fundName}) async {
+    final w = <String>[]; final a = <Object?>[];
+    if (from != null) { w.add('b.date >= ?'); a.add(DateTime(from.year, from.month, from.day).toIso8601String()); }
+    if (to != null) { w.add('b.date < ?'); a.add(DateTime(to.year, to.month, to.day + 1).toIso8601String()); }
+    if (fundName != null && fundName.trim().isNotEmpty) { w.add('b.fund_name = ?'); a.add(fundName.trim()); }
+    final ws = w.isEmpty ? '' : 'WHERE ${w.join(' AND ')}';
+    return db.rawQuery("""
+      SELECT type, COALESCE(SUM(amount),0) total, COUNT(*) entries
+      FROM (
+        SELECT b.id, b.type, b.fund_name, f.amount FROM contribution_batches b JOIN fungu_contributions f ON f.batch_id=b.id $ws
+        UNION ALL
+        SELECT b.id, b.type, b.fund_name, o.amount FROM contribution_batches b JOIN other_contributions o ON o.batch_id=b.id $ws
+      ) GROUP BY type ORDER BY total DESC
+    """, [...a, ...a]);
+  }
+
+  Future<List<Map<String, Object?>>> getOverallFundBreakdown({DateTime? from, DateTime? to, String? fundName}) async {
+    final wc=<String>[]; final ac=<Object?>[]; final we=<String>[]; final ae=<Object?>[];
+    if(from!=null){final v=DateTime(from.year,from.month,from.day).toIso8601String();wc.add('b.date >= ?');ac.add(v);we.add('b.date >= ?');ae.add(v);}
+    if(to!=null){final v=DateTime(to.year,to.month,to.day+1).toIso8601String();wc.add('b.date < ?');ac.add(v);we.add('b.date < ?');ae.add(v);}
+    if(fundName!=null&&fundName.trim().isNotEmpty){wc.add('b.fund_name = ?');ac.add(fundName.trim());we.add('b.fund_name = ?');ae.add(fundName.trim());}
+    final sc=wc.isEmpty?'':'WHERE ${wc.join(' AND ')}'; final se=we.isEmpty?'':'WHERE ${we.join(' AND ')}';
+    final rows=await db.rawQuery("""SELECT fund_name, SUM(income) income, SUM(expenditure) expenditure FROM (
+      SELECT COALESCE(NULLIF(TRIM(b.fund_name),''),'HAJAWEKWA') fund_name, SUM(x.amount) income, 0 expenditure FROM contribution_batches b JOIN (SELECT batch_id, amount FROM fungu_contributions UNION ALL SELECT batch_id, amount FROM other_contributions) x ON x.batch_id=b.id $sc GROUP BY fund_name
+      UNION ALL
+      SELECT COALESCE(NULLIF(TRIM(b.fund_name),''),'HAJAWEKWA') fund_name, 0 income, SUM(e.amount) expenditure FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $se GROUP BY fund_name
+    ) GROUP BY fund_name ORDER BY (income + expenditure) DESC, fund_name COLLATE NOCASE""",[...ac,...ae]);
+    return rows.map((r){final income=(r['income'] as num?)?.toDouble()??0;final exp=(r['expenditure'] as num?)?.toDouble()??0;return {...r,'income':income,'expenditure':exp,'balance':income-exp};}).toList();
+  }
+
+  Future<List<Map<String, Object?>>> getOverallDailyTrend({DateTime? from, DateTime? to, String? fundName}) async {
+    final wc=<String>[]; final ac=<Object?>[]; final we=<String>[]; final ae=<Object?>[];
+    if(from!=null){final v=DateTime(from.year,from.month,from.day).toIso8601String();wc.add('b.date >= ?');ac.add(v);we.add('b.date >= ?');ae.add(v);}
+    if(to!=null){final v=DateTime(to.year,to.month,to.day+1).toIso8601String();wc.add('b.date < ?');ac.add(v);we.add('b.date < ?');ae.add(v);}
+    if(fundName!=null&&fundName.trim().isNotEmpty){wc.add('b.fund_name = ?');ac.add(fundName.trim());we.add('b.fund_name = ?');ae.add(fundName.trim());}
+    final sc=wc.isEmpty?'':'WHERE ${wc.join(' AND ')}'; final se=we.isEmpty?'':'WHERE ${we.join(' AND ')}';
+    final rows=await db.rawQuery("""SELECT day, SUM(income) income, SUM(expenditure) expenditure FROM (
+      SELECT substr(b.date,1,10) day, SUM(x.amount) income, 0 expenditure FROM contribution_batches b JOIN (SELECT batch_id, amount FROM fungu_contributions UNION ALL SELECT batch_id, amount FROM other_contributions) x ON x.batch_id=b.id $sc GROUP BY day
+      UNION ALL
+      SELECT substr(b.date,1,10) day, 0 income, SUM(e.amount) expenditure FROM expenditure_batches b JOIN expenditure_entries e ON e.batch_id=b.id $se GROUP BY day
+    ) GROUP BY day ORDER BY day ASC""",[...ac,...ae]);
+    return rows.map((r){final income=(r['income'] as num?)?.toDouble()??0;final exp=(r['expenditure'] as num?)?.toDouble()??0;return {...r,'income':income,'expenditure':exp,'balance':income-exp};}).toList();
+  }
+
+  Future<List<Map<String, Object?>>> getOverallExpenditureBreakdown({DateTime? from, DateTime? to, String? fundName}) async {
+    return getBalanceExpenditureByCategory(from: from, to: to, fundName: fundName);
+  }
+
   Future<Map<String,Object?>> _contributionTotal({DateTime? from, DateTime? to, String? fundName}) async {
     final w=<String>[]; final a=<Object?>[]; if(from!=null){w.add('b.date >= ?');a.add(DateTime(from.year,from.month,from.day).toIso8601String());} if(to!=null){w.add('b.date < ?');a.add(DateTime(to.year,to.month,to.day+1).toIso8601String());} if(fundName!=null&&fundName.trim().isNotEmpty){w.add('b.fund_name = ?');a.add(fundName.trim());} final ws=w.isEmpty?'':'WHERE ${w.join(' AND ')}';
     final r=await db.rawQuery('SELECT COUNT(*) entries, COALESCE(SUM(amount),0) total FROM (SELECT b.id,x.amount FROM contribution_batches b JOIN fungu_contributions x ON x.batch_id=b.id $ws UNION ALL SELECT b.id,x.amount FROM contribution_batches b JOIN other_contributions x ON x.batch_id=b.id $ws)',[...a,...a]); return r.first;
