@@ -23,6 +23,15 @@ ThemeData buildTheme() {
       secondary: C.teal,
     ),
     scaffoldBackgroundColor: C.bg,
+    canvasColor: C.bg,
+    cardColor: Colors.white,
+    visualDensity: VisualDensity.standard,
+    dividerColor: C.border,
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: C.teal,
+      selectionColor: Color(0x3320A995),
+      selectionHandleColor: C.teal,
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
