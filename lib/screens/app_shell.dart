@@ -7,6 +7,7 @@ import 'contribution_input_page.dart';
 import 'contribution_records_page.dart';
 import 'expenditure_input_page.dart';
 import 'expenditure_records_page.dart';
+import 'expenditure_summary_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -54,6 +55,7 @@ class _AppShellState extends State<AppShell> {
     if (_index == 2) return const ContributionRecordsPage();
     if (_index == 3) return const ExpenditureInputPage();
     if (_index == 4) return const ExpenditureRecordsPage();
+    if (_index == 5) return const ExpenditureSummaryPage();
     if (_index == 8) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
