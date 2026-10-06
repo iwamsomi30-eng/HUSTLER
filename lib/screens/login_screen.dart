@@ -5,7 +5,7 @@ import '../core/db.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../widgets/lang_toggle.dart';
-import 'cloud_login_dialog.dart';
+import 'link_device_page.dart';
 import '../services/cloud_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _error = 'cloud_not_configured');
       return;
     }
-    final ok = await showDialog<bool>(context: context, builder: (_) => const CloudLoginDialog()) ?? false;
+    final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const LinkDevicePage())) ?? false;
     if (!ok || !mounted) return;
     if (widget.setup) {
       final pin = await showDialog<String>(context: context, barrierDismissible: false, builder: (context) {
@@ -54,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pin == null) return;
       await Auth.setPin(pin);
     }
-    await AppDb.instance.audit('CLOUD_LOGIN', CloudService.user?.email);
+    await AppDb.instance.audit('CLOUD_LINK_LOGIN');
     widget.onSuccess();
   }
 
@@ -195,7 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               if (CloudService.available) ...[
                                 const SizedBox(height: 10),
-                                SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _cloudLogin, icon: const Icon(Icons.cloud_outlined), label: Text(tr('cloud_login')))),
+                                SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _cloudLogin, icon: const Icon(Icons.qr_code_scanner), label: Text(tr('link_join_btn')))),
                               ],
                             ],
                           ),
