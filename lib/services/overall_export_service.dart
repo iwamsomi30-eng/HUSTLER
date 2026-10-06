@@ -12,7 +12,7 @@ import 'package:share_plus/share_plus.dart';
 class OverallExportService {
   static String money(Object? value) {
     final n = (value as num?)?.toDouble() ?? 0;
-    return '${n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
+    return '${n.round().toString()} TZS';
   }
 
   static String periodLabel(DateTime? from, DateTime? to) {
