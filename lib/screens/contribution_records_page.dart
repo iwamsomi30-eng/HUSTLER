@@ -290,7 +290,10 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
     return Padding(padding: const EdgeInsets.only(bottom: 12), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Container(width: 38, height: 38, decoration: BoxDecoration(color: (isFungu ? C.teal : C.gold).withOpacity(.12), borderRadius: BorderRadius.circular(10)), child: Icon(isFungu ? Icons.mail_outline : Icons.volunteer_activism_outlined, color: isFungu ? C.teal : C.gold)), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isFungu ? tr('fungu') : (head['title'] ?? tr('other_contributions')).toString(), style: const TextStyle(fontWeight: FontWeight.w800, color: C.text)), const SizedBox(height: 2), Text('IBADA ${head['service']} • ${rows.length} ${tr('records_entries')}', style: const TextStyle(fontSize: 12, color: C.muted))])), Text(_money(total), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy))]),
       const SizedBox(height: 12),
-      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : 'MCH No.')), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)))])).toList())),
+      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : 'MCH No.')), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
+        IconButton(tooltip: tr('delete'), icon: Icon(Icons.delete_outline, size: 19, color: Colors.red.shade700), onPressed: () => _deleteRow(r)),
+      ]))])).toList())),
     ])));
   }
 
@@ -312,9 +315,67 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Padding(padding: const EdgeInsets.only(right: 8, top: 2), child: Text(_money(r['amount']), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy, fontSize: 13))),
           IconButton(tooltip: tr('edit'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
+          IconButton(tooltip: tr('delete'), visualDensity: VisualDensity.compact, icon: Icon(Icons.delete_outline, size: 19, color: Colors.red.shade700), onPressed: () => _deleteRow(r)),
         ]),
       ]),
     );
+  }
+
+  Future<void> _deleteRow(Map<String, Object?> row) async {
+    final isFungu = row['type'] == 'FUNGU';
+    final number = (isFungu ? row['envelope_no'] : row['name_no'])?.toString() ?? '';
+    final amount = _money(row['amount']);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('delete_record_title')),
+        content: Text(
+          '${tr('delete_record_message')}\\n\\n'
+          '${isFungu ? tr('envelope_no') : 'MCH No.'}: $number\\n'
+          '${tr('amount')}: $amount',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('cancel')),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_outline),
+            label: Text(tr('delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await AppDb.instance.deleteContributionRow(
+        id: (row['row_id'] as num).toInt(),
+        isFungu: isFungu,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('delete_contribution_success')),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: C.teal,
+        ),
+      );
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('delete_failed')),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
   }
 
   Future<void> _editRow(Map<String, Object?> row) async {
