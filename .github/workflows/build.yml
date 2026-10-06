@@ -53,7 +53,23 @@ jobs:
           EOF
           fi
       - run: flutter pub get
-      - run: flutter build apk --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      - name: Hakiki Supabase secrets
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::GitHub secrets SUPABASE_URL na/au SUPABASE_PUBLISHABLE_KEY hazijawekwa (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          case "$SUPABASE_URL" in https://*.supabase.co*) ;; *) echo "::error::SUPABASE_URL lazima ianze na https:// na iwe ya supabase.co"; exit 1;; esac
+      - name: Build apk
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - uses: actions/upload-artifact@v4
         with:
           name: mfuko-android-apk
@@ -72,7 +88,23 @@ jobs:
         shell: bash
         run: sed -i 's/L"mfuko_wa_kanisa"/L"MFUKO WA MAPATO YA KANISA"/' windows/runner/main.cpp
       - run: flutter pub get
-      - run: flutter build windows --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      - name: Hakiki Supabase secrets
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::GitHub secrets SUPABASE_URL na/au SUPABASE_PUBLISHABLE_KEY hazijawekwa (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          case "$SUPABASE_URL" in https://*.supabase.co*) ;; *) echo "::error::SUPABASE_URL lazima ianze na https:// na iwe ya supabase.co"; exit 1;; esac
+      - name: Build windows
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build windows --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - uses: actions/upload-artifact@v4
         with:
           name: mfuko-windows-app
