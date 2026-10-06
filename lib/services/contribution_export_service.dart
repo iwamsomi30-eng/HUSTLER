@@ -29,7 +29,7 @@ class ContributionExportService {
 
   static String money(Object? value) {
     final n = value is num ? value.toDouble() : (double.tryParse('${value ?? ''}') ?? 0);
-    return '${n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
+    return '${n.round().toString()} TZS';
   }
 
   static String safeDate(String day) => day.replaceAll('-', '');
