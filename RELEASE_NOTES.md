@@ -1,0 +1,2 @@
+- Andika hapa mambo mapya uliyoboresha kwenye toleo hili (mstari mmoja kwa kila boresho).
+- Maandishi haya ndiyo yataonekana kwa watumiaji kwenye dirisha la "Toleo jipya".
