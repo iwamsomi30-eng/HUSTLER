@@ -122,7 +122,7 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: L10n.instance,
     builder: (_, __) => SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+      padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 40),
       child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1250), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _hero(), const SizedBox(height: 16), _contextCard(), const SizedBox(height: 16), _categoryBar(), const SizedBox(height: 12), _entryCard(),
       ]))),
@@ -156,7 +156,15 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
   Widget _categoryBar() => Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)), child: Padding(padding: const EdgeInsets.all(14), child: Wrap(spacing: 8, runSpacing: 8, children: [for (final c in ExpenditureCategory.values) ChoiceChip(label: Text(c.code), avatar: Icon(c.icon, size: 18), selected: _category==c, onSelected: (_) => setState(() => _category=c))])));
 
   Widget _entryCard() => Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)), child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_category.code, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text('${_rows.length} ${tr('expense_entries')}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))])), Text('JUMLA: ${_money(_total)} TZS', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)), const SizedBox(width: 12), OutlinedButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: Text(tr('add_row')))]),
+    LayoutBuilder(builder: (_, hc) {
+      final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_category.code, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text('${_rows.length} ${tr('expense_entries')}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))]);
+      final totalText = Text('JUMLA: ${_money(_total)} TZS', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15));
+      final addBtn = OutlinedButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: Text(tr('add_row')));
+      if (hc.maxWidth < 560) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [titleBlock, const SizedBox(height: 10), Row(children: [Expanded(child: totalText), addBtn])]);
+      }
+      return Row(children: [Expanded(child: titleBlock), totalText, const SizedBox(width: 12), addBtn]);
+    }),
     const SizedBox(height: 14),
     ...List.generate(_rows.length, (i) => _row(i)),
     const SizedBox(height: 12),
