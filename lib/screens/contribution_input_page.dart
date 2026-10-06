@@ -68,13 +68,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   }
 
   String _money(double value) {
-    final s = value.round().toString();
-    final out = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) out.write(',');
-      out.write(s[i]);
-    }
-    return out.toString();
+    return value.round().toString();
   }
 
   double _sum(List<ContributionRow> rows) {
