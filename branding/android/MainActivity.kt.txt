@@ -1,0 +1,77 @@
+package __PKG__
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.telephony.SmsManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+/// Inatuma SMS za uthibitisho wa michango kupitia SIM ya simu (channel "mfuko/sms").
+class MainActivity : FlutterActivity() {
+    private val channelName = "mfuko/sms"
+    private val reqCode = 7731
+    private var pending: MethodChannel.Result? = null
+
+    private fun hasSmsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+
+    @Suppress("DEPRECATION")
+    private fun smsManager(): SmsManager =
+        if (Build.VERSION.SDK_INT >= 31) getSystemService(SmsManager::class.java) else SmsManager.getDefault()
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestPermission" -> {
+                    if (hasSmsPermission()) {
+                        result.success(true)
+                    } else if (pending != null) {
+                        result.success(false)
+                    } else {
+                        pending = result
+                        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), reqCode)
+                    }
+                }
+                "send" -> {
+                    val list = call.argument<List<Map<String, String>>>("messages") ?: emptyList()
+                    val out = ArrayList<Boolean>()
+                    if (!hasSmsPermission()) {
+                        list.forEach { _ -> out.add(false) }
+                    } else {
+                        val sm = smsManager()
+                        for (m in list) {
+                            try {
+                                val to = m["to"] ?: ""
+                                val text = m["text"] ?: ""
+                                val parts = sm.divideMessage(text)
+                                if (parts.size > 1) {
+                                    sm.sendMultipartTextMessage(to, null, parts, null, null)
+                                } else {
+                                    sm.sendTextMessage(to, null, text, null, null)
+                                }
+                                out.add(true)
+                            } catch (e: Exception) {
+                                out.add(false)
+                            }
+                        }
+                    }
+                    result.success(out)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == reqCode) {
+            pending?.success(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            pending = null
+        }
+    }
+}
