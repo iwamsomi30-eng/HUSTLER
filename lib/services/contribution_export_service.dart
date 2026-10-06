@@ -10,8 +10,25 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ContributionExportService {
+  /// Faragha: majina halisi ya watoaji HAYAWEKWI kwenye PDF/Excel.
+  /// Mtoaji anatambulika kwa Namba ya Bahasha (FUNGU) au MCH No. (Michango Mingine).
+  /// Namba ya simu nayo inaweza kumtambulisha mtu; iko OFF kwa chaguo-msingi.
+  static const bool includeContact = false;
+
+  static String idNumber(Map<String, Object?> r) {
+    final v = r['type'] == 'FUNGU' ? r['envelope_no'] : r['name_no'];
+    final t = '${v ?? ''}'.trim();
+    return t.isEmpty ? '—' : t;
+  }
+
+  static double amountOf(Map<String, Object?> r) {
+    final v = r['amount'];
+    if (v is num) return v.toDouble();
+    return double.tryParse('${v ?? ''}'.replaceAll(',', '').trim()) ?? 0;
+  }
+
   static String money(Object? value) {
-    final n = (value as num?)?.toDouble() ?? 0;
+    final n = value is num ? value.toDouble() : (double.tryParse('${value ?? ''}') ?? 0);
     return '${n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
   }
 
@@ -23,7 +40,7 @@ class ContributionExportService {
     required String title,
   }) async {
     final doc = pw.Document();
-    final total = rows.fold<double>(0, (s, r) => s + ((r['amount'] as num?)?.toDouble() ?? 0));
+    final total = rows.fold<double>(0, (s, r) => s + amountOf(r));
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
@@ -49,14 +66,17 @@ class ContributionExportService {
         build: (_) => [
           pw.SizedBox(height: 10),
           pw.TableHelper.fromTextArray(
-            headers: const ['Aina', 'Ibada', 'Namba', 'Jina la Mtoaji', 'Jina la Mchango', 'Contact', 'Kiasi (TZS)', 'Receipt'],
+            headers: [
+              'Aina', 'Ibada', 'Namba (Bahasha / MCH)', 'Jina la Mchango',
+              if (includeContact) 'Contact',
+              'Kiasi (TZS)', 'Receipt',
+            ],
             data: rows.map((r) => [
               r['type'] == 'FUNGU' ? 'FUNGU' : 'MCHANGO MENGINE',
               'IBADA ${(r['service'] as num?)?.toInt() ?? 1}',
-              r['type'] == 'FUNGU' ? (r['envelope_no'] ?? '') : (r['name_no'] ?? ''),
-              r['donor_name'] ?? '',
+              idNumber(r),
               r['contribution_name'] ?? (r['type'] == 'FUNGU' ? 'FUNGU' : ''),
-              r['contact'] ?? '',
+              if (includeContact) r['contact'] ?? '',
               money(r['amount']),
               r['receipt_no'] ?? '',
             ]).toList(),
@@ -64,16 +84,6 @@ class ContributionExportService {
             cellStyle: const pw.TextStyle(fontSize: 7),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
             cellAlignment: pw.Alignment.centerLeft,
-            columnWidths: const {
-              0: pw.FlexColumnWidth(1.2),
-              1: pw.FlexColumnWidth(.8),
-              2: pw.FlexColumnWidth(1),
-              3: pw.FlexColumnWidth(2),
-              4: pw.FlexColumnWidth(1.7),
-              5: pw.FlexColumnWidth(1.4),
-              6: pw.FlexColumnWidth(1.3),
-              7: pw.FlexColumnWidth(1.8),
-            },
           ),
           pw.SizedBox(height: 14),
           pw.Align(
@@ -104,7 +114,7 @@ class ContributionExportService {
   }) async {
     final excel = Excel.createExcel();
     final sheet = excel['Michango'];
-    final headers = ['Tarehe', 'Aina', 'Ibada', 'Namba', 'Jina la Mtoaji', 'Jina la Mchango', 'Contact', 'Kiasi (TZS)', 'Receipt No.'];
+    final headers = ['Tarehe', 'Aina', 'Ibada', 'Namba (Bahasha / MCH)', 'Jina la Mchango', if (includeContact) 'Contact', 'Kiasi (TZS)', 'Receipt No.'];
     for (var i = 0; i < headers.length; i++) {
       final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
       cell.value = TextCellValue(headers[i]);
@@ -112,15 +122,14 @@ class ContributionExportService {
     }
     for (var r = 0; r < rows.length; r++) {
       final row = rows[r];
-      final values = [
+      final values = <Object>[
         day,
         row['type'] == 'FUNGU' ? 'FUNGU' : 'MCHANGO MENGINE',
         'IBADA ${(row['service'] as num?)?.toInt() ?? 1}',
-        row['type'] == 'FUNGU' ? (row['envelope_no'] ?? '').toString() : (row['name_no'] ?? '').toString(),
-        (row['donor_name'] ?? '').toString(),
+        idNumber(row),
         (row['contribution_name'] ?? (row['type'] == 'FUNGU' ? 'FUNGU' : '')).toString(),
-        (row['contact'] ?? '').toString(),
-        (row['amount'] as num?)?.toDouble() ?? 0,
+        if (includeContact) (row['contact'] ?? '').toString(),
+        amountOf(row),
         (row['receipt_no'] ?? '').toString(),
       ];
       for (var c = 0; c < values.length; c++) {
@@ -129,10 +138,11 @@ class ContributionExportService {
         cell.value = v is num ? DoubleCellValue(v.toDouble()) : TextCellValue(v.toString());
       }
     }
-    final total = rows.fold<double>(0, (s, r) => s + ((r['amount'] as num?)?.toDouble() ?? 0));
+    final total = rows.fold<double>(0, (s, r) => s + amountOf(r));
+    final amountCol = headers.indexOf('Kiasi (TZS)');
     final tr = rows.length + 2;
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: tr)).value = TextCellValue('JUMLA KUU');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: tr)).value = DoubleCellValue(total);
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: amountCol - 1, rowIndex: tr)).value = TextCellValue('JUMLA KUU');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: amountCol, rowIndex: tr)).value = DoubleCellValue(total);
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'michango_${safeDate(day)}.xlsx'));
     final bytes = excel.encode();
