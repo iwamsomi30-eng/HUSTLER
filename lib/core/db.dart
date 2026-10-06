@@ -903,6 +903,129 @@ class AppDb {
     return rows.isEmpty ? {} : rows.first;
   }
 
+  /// Futa mstari mmoja wa mchango. Ikiwa ulikuwa mstari wa mwisho wa batch,
+  /// container ya batch nayo huondolewa ili takwimu za siku zisibaki na batch tupu.
+  Future<void> deleteContributionRow({
+    required int id,
+    required bool isFungu,
+  }) async {
+    await _ensureWritable();
+    final table = isFungu ? 'fungu_contributions' : 'other_contributions';
+    final now = _now();
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        table,
+        columns: ['batch_id', 'sync_id'],
+        where: 'id=?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final row = rows.first;
+      final batchId = (row['batch_id'] as num).toInt();
+      final syncId = '${row['sync_id']}';
+      await txn.insert(
+        'sync_tombstones',
+        {'entity_type': table, 'sync_id': syncId, 'deleted_at': now},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.delete(table, where: 'id=?', whereArgs: [id]);
+
+      final remaining = await txn.rawQuery("""
+        SELECT
+          (SELECT COUNT(*) FROM fungu_contributions WHERE batch_id=?) +
+          (SELECT COUNT(*) FROM other_contributions WHERE batch_id=?) AS c
+      """, [batchId, batchId]);
+      final count = (remaining.first['c'] as num?)?.toInt() ?? 0;
+      if (count == 0) {
+        final batch = await txn.query(
+          'contribution_batches',
+          columns: ['sync_id'],
+          where: 'id=?',
+          whereArgs: [batchId],
+          limit: 1,
+        );
+        for (final b in batch) {
+          await txn.insert(
+            'sync_tombstones',
+            {
+              'entity_type': 'contribution_batches',
+              'sync_id': b['sync_id'],
+              'deleted_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await txn.delete('contribution_batches', where: 'id=?', whereArgs: [batchId]);
+      }
+    });
+    await _markSyncDirty();
+    await audit('CONTRIBUTION_DELETED', 'table=$table; id=$id');
+  }
+
+  /// Hufuta data zote za biashara (michango + matumizi) bila kugusa PIN,
+  /// lugha, settings za app au audit log. Tombstones zinahifadhiwa ili
+  /// deletion isambae kwenye vifaa vilivyounganishwa wakati wa sync.
+  Future<Map<String, int>> deleteAllBusinessData() async {
+    await _ensureWritable();
+    final now = _now();
+    final counts = <String, int>{};
+    await db.transaction((txn) async {
+      for (final table in const [
+        'fungu_contributions',
+        'other_contributions',
+        'expenditure_entries',
+        'contribution_batches',
+        'expenditure_batches',
+      ]) {
+        final rows = await txn.query(table, columns: ['sync_id']);
+        counts[table] = rows.length;
+        for (final row in rows) {
+          await txn.insert(
+            'sync_tombstones',
+            {
+              'entity_type': table,
+              'sync_id': row['sync_id'],
+              'deleted_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      await txn.delete('fungu_contributions');
+      await txn.delete('other_contributions');
+      await txn.delete('expenditure_entries');
+      await txn.delete('contribution_batches');
+      await txn.delete('expenditure_batches');
+    });
+    await _markSyncDirty();
+    await audit(
+      'ALL_BUSINESS_DATA_DELETED',
+      'fungu=${counts['fungu_contributions'] ?? 0}; '
+          'other=${counts['other_contributions'] ?? 0}; '
+          'expense_rows=${counts['expenditure_entries'] ?? 0}; '
+          'contribution_batches=${counts['contribution_batches'] ?? 0}; '
+          'expense_batches=${counts['expenditure_batches'] ?? 0}',
+    );
+    return counts;
+  }
+
+  Future<Map<String, int>> getBusinessDataCounts() async {
+    final result = <String, int>{};
+    for (final table in const [
+      'fungu_contributions',
+      'other_contributions',
+      'expenditure_entries',
+      'contribution_batches',
+      'expenditure_batches',
+    ]) {
+      final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM $table');
+      result[table] = (rows.first['c'] as num?)?.toInt() ?? 0;
+    }
+    return result;
+  }
+
   Future<String?> getSetting(String key) async {
     final rows =
         await db.query('settings', where: 'key = ?', whereArgs: [key], limit: 1);
