@@ -131,7 +131,7 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
 
   Widget _hero() => Container(
     padding: const EdgeInsets.all(22),
-    decoration: BoxDecoration(gradient: const LinearGradient(colors: [C.navy, C.navyDark]), borderRadius: BorderRadius.circular(18)),
+    decoration: BoxDecoration(color: C.navy, borderRadius: BorderRadius.circular(18)),
     child: Row(children: [
       Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: C.gold.withOpacity(.16), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.payments_outlined, color: C.gold, size: 30)),
       const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('MAINGIZO YA MATUMIZI', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text('Ingiza matumizi, yahifadhiwe salama na yaingie moja kwa moja kwenye Muhtasari wa Matumizi.', style: TextStyle(color: Colors.white70, fontSize: 13))])),
