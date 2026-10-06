@@ -6,19 +6,71 @@ import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'screens/app_shell.dart';
 import 'screens/login_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/cloud_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppDb.instance.init();
-  await CloudService.initialize();
-  await L10n.instance.load();
-  Timer.periodic(const Duration(minutes: 1), (_) async {
-    if (CloudService.available && CloudService.user != null) {
-      try { await CloudService.sync(); } catch (_) {}
+  runApp(const BootApp());
+}
+
+/// Inaonyesha SplashScreen (logo) wakati database, cloud na lugha vinapakiwa,
+/// kisha inafungua app. Splash inaonekana angalau sekunde ~2 ili logo ionekane vizuri.
+class BootApp extends StatefulWidget {
+  const BootApp({super.key});
+
+  @override
+  State<BootApp> createState() => _BootAppState();
+}
+
+class _BootAppState extends State<BootApp> {
+  bool _ready = false;
+  String? _error;
+  Timer? _syncTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    if (mounted) setState(() => _error = null);
+    final started = DateTime.now();
+    try {
+      await AppDb.instance.init();
+      await CloudService.initialize();
+      await L10n.instance.load();
+      _syncTimer ??= Timer.periodic(const Duration(minutes: 1), (_) async {
+        if (CloudService.available && CloudService.user != null) {
+          try { await CloudService.sync(); } catch (_) {}
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Imeshindikana kufungua app: $e');
+      return;
     }
-  });
-  runApp(const MfukoApp());
+    final left = const Duration(milliseconds: 2000) - DateTime.now().difference(started);
+    if (!left.isNegative) await Future<void>.delayed(left);
+    if (mounted) setState(() => _ready = true);
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_ready) return const MfukoApp();
+    return MaterialApp(
+      title: 'MFUKO WA MAPATO YA KANISA',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      home: SplashScreen(error: _error, onRetry: _error == null ? null : _boot),
+    );
+  }
 }
 
 class MfukoApp extends StatelessWidget {
