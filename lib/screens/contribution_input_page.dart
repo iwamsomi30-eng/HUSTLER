@@ -303,11 +303,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [C.navy, C.navyDark],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: C.navy,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -556,9 +552,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
           Container(
             padding: const EdgeInsets.fromLTRB(18, 15, 14, 15),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF7FAFE), Colors.white],
-              ),
+              color: Color(0xFFF7FAFE),
               border: Border(bottom: BorderSide(color: C.border)),
             ),
             child: Row(
