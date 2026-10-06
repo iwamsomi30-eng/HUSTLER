@@ -74,7 +74,7 @@ class UpdateService extends ChangeNotifier {
         final curBuild = int.tryParse(info.buildNumber) ?? 0;
         String? url;
         int size = 0;
-        final wantExt = Platform.isAndroid ? '.apk' : '.zip';
+        final wantExt = Platform.isAndroid ? '.apk' : '.exe';
         for (final a in (j['assets'] as List? ?? const [])) {
           final name = '${a['name']}'.toLowerCase();
           if (name.endsWith(wantExt)) {
