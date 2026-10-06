@@ -162,8 +162,14 @@ class AppDb {
   String _now() => DateTime.now().toUtc().toIso8601String();
 
   Future<void> _ensureWritable() async {
-    final role = await getSetting('cloud_role');
-    if (role == 'viewer') throw StateError('READ_ONLY_ACCESS');
+    // All actively linked devices are full peers.
+    // A legacy `viewer` role is still allowed to write locally so an old
+    // pairing can be upgraded by the next cloud sync instead of blocking
+    // the user with READ_ONLY_ACCESS.
+  }
+
+  Future<void> _markSyncDirty() async {
+    await setSetting('cloud_sync_dirty', DateTime.now().toUtc().toIso8601String());
   }
 
   Future<String> _newSyncId() async => _uuid.v4();
@@ -223,7 +229,7 @@ class AppDb {
   }) async {
     await _ensureWritable();
     if (rows.isEmpty) throw ArgumentError('At least one expenditure row is required');
-    return db.transaction<int>((txn) async {
+    final batchId = await db.transaction<int>((txn) async {
       final batchId = await txn.insert('expenditure_batches', {
         'date': date, 'category': category,
         'fund_name': fundName.trim().isEmpty ? null : fundName.trim(),
@@ -244,6 +250,8 @@ class AppDb {
       }
       return batchId;
     });
+    await _markSyncDirty();
+    return batchId;
   }
 
   Future<List<Map<String, Object?>>> getExpenditureSummary({String? search, DateTime? from, DateTime? to}) async {
@@ -502,6 +510,7 @@ class AppDb {
         });
       }
     });
+    await _markSyncDirty();
     await audit('EXPENDITURE_UPDATED', 'batch=$batchId; rows=${rows.length}');
   }
 
@@ -516,6 +525,7 @@ class AppDb {
       await txn.delete('expenditure_entries', where: 'batch_id = ?', whereArgs: [batchId]);
       await txn.delete('expenditure_batches', where: 'id = ?', whereArgs: [batchId]);
     });
+    await _markSyncDirty();
     await audit('EXPENDITURE_DELETED', 'batch=$batchId');
   }
 
@@ -632,7 +642,7 @@ class AppDb {
     required String title,
   }) async {
     await _ensureWritable();
-    return db.insert('contribution_batches', {
+    final id = await db.insert('contribution_batches', {
       'date': date,
       'type': type,
       'service': service,
@@ -640,6 +650,8 @@ class AppDb {
       'created_at': DateTime.now().toIso8601String(),
       'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
+    await _markSyncDirty();
+    return id;
   }
 
   Future<int> saveFunguBatch({
@@ -650,7 +662,7 @@ class AppDb {
     required List<Map<String, Object?>> rows,
   }) async {
     await _ensureWritable();
-    return db.transaction<int>((txn) async {
+    final batchId = await db.transaction<int>((txn) async {
       final batchId = await txn.insert('contribution_batches', {
         'date': date,
         'type': 'FUNGU',
@@ -674,6 +686,8 @@ class AppDb {
       }
       return batchId;
     });
+    await _markSyncDirty();
+    return batchId;
   }
 
   Future<int> saveOtherBatch({
@@ -684,7 +698,7 @@ class AppDb {
     required List<Map<String, Object?>> rows,
   }) async {
     await _ensureWritable();
-    return db.transaction<int>((txn) async {
+    final batchId = await db.transaction<int>((txn) async {
       final batchId = await txn.insert('contribution_batches', {
         'date': date,
         'type': 'OTHER',
@@ -714,6 +728,8 @@ class AppDb {
       }
       return batchId;
     });
+    await _markSyncDirty();
+    return batchId;
   }
 
   Future<int> addFunguContribution({
@@ -724,7 +740,7 @@ class AppDb {
     required double amount,
     required String receiptNo,
   }) async {
-    return db.insert('fungu_contributions', {
+    final id = await db.insert('fungu_contributions', {
       'batch_id': batchId,
       'envelope_no': envelopeNo.trim(),
       'donor_name': donorName.trim().isEmpty ? null : donorName.trim(),
@@ -734,6 +750,8 @@ class AppDb {
       'created_at': DateTime.now().toIso8601String(),
       'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
+    await _markSyncDirty();
+    return id;
   }
 
   Future<int> addOtherContribution({
@@ -745,7 +763,7 @@ class AppDb {
     required double amount,
     required String receiptNo,
   }) async {
-    return db.insert('other_contributions', {
+    final id = await db.insert('other_contributions', {
       'batch_id': batchId,
       'contribution_name': contributionName.trim(),
       'donor_name': donorName.trim(),
@@ -756,6 +774,8 @@ class AppDb {
       'created_at': DateTime.now().toIso8601String(),
       'sync_id': _uuid.v4(), 'updated_at': _now(),
     });
+    await _markSyncDirty();
+    return id;
   }
 
   Future<String> nextDonorNumber() async {
@@ -853,6 +873,7 @@ class AppDb {
       'amount': amount,
       'updated_at': _now(),
     }, where: 'id = ?', whereArgs: [id]);
+    await _markSyncDirty();
     await audit('CONTRIBUTION_FUNGU_UPDATED', 'id=$id; amount=$amount');
     return count;
   }
@@ -866,6 +887,7 @@ class AppDb {
       'amount': amount,
       'updated_at': _now(),
     }, where: 'id = ?', whereArgs: [id]);
+    await _markSyncDirty();
     await audit('CONTRIBUTION_OTHER_UPDATED', 'id=$id; amount=$amount');
     return count;
   }
