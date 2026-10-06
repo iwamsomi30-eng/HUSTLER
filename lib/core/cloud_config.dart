@@ -6,10 +6,11 @@ class CloudConfig {
   static const url = String.fromEnvironment('SUPABASE_URL');
   static const publishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
-  static bool get configured => url.isNotEmpty && publishableKey.isNotEmpty;
+  static bool get configured =>
+      url.trim().startsWith('https://') && publishableKey.trim().isNotEmpty;
 
   static String? missingMessage() {
     if (configured) return null;
-    return 'Cloud haija-configurewa. Tumia --dart-define=SUPABASE_URL=... na SUPABASE_PUBLISHABLE_KEY=...';
+    return 'Cloud haijawekwa kwenye toleo hili la app. Pakua toleo jipya lililotengenezwa baada ya kuweka Supabase secrets, au wasiliana na msimamizi wa mfumo.';
   }
 }
