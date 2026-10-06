@@ -227,7 +227,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
       listenable: L10n.instance,
       builder: (context, _) {
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+          padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1220),
@@ -540,31 +540,46 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
               color: Color(0xFFFBFCFE),
               border: Border(top: BorderSide(color: C.border)),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('${tr('total')}: ${_money(total)} TZS',
-                      style: const TextStyle(
-                          color: C.navy, fontWeight: FontWeight.w800, fontSize: 14)),
+            child: LayoutBuilder(builder: (context, box) {
+              final totalText = Text('${tr('total')}: ${_money(total)} TZS',
+                  style: const TextStyle(
+                      color: C.navy, fontWeight: FontWeight.w800, fontSize: 14));
+              final addBtn = OutlinedButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(tr('add_row')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: C.navy,
+                  side: const BorderSide(color: C.border),
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(tr('add_row')),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: C.navy,
-                    side: const BorderSide(color: C.border),
-                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-                  ),
-                ),
+              );
+              final saveBtn = ElevatedButton.icon(
+                onPressed: onSave,
+                icon: const Icon(Icons.save_outlined, size: 18),
+                label: Text(tr('save')),
+              );
+              if (box.maxWidth < 480) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    totalText,
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: addBtn),
+                      const SizedBox(width: 8),
+                      Expanded(child: saveBtn),
+                    ]),
+                  ],
+                );
+              }
+              return Row(children: [
+                Expanded(child: totalText),
+                addBtn,
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: onSave,
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: Text(tr('save')),
-                ),
-              ],
-            ),
+                saveBtn,
+              ]);
+            }),
           ),
         ],
       ),
@@ -606,6 +621,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   Widget _rowEditor(
       int index, ContributionRow row, bool fungu, List<ContributionRow> rows) {
     return Padding(
+      key: ObjectKey(row),
       padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,7 +642,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
               child: _compactField(
                 initial: row.envelopeNo,
                 hint: '001',
-                onChanged: (v) => row.envelopeNo = v,
+                onChanged: (v) => setState(() => row.envelopeNo = v),
               ),
             ),
           const SizedBox(width: 6),
@@ -635,7 +651,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
             child: _compactField(
               initial: row.donorName,
               hint: tr('name'),
-              onChanged: (v) => row.donorName = v,
+              onChanged: (v) => setState(() => row.donorName = v),
             ),
           ),
           const SizedBox(width: 6),
@@ -645,7 +661,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
               initial: row.amount,
               hint: '0',
               number: true,
-              onChanged: (v) => row.amount = v,
+              onChanged: (v) => setState(() => row.amount = v),
             ),
           ),
           const SizedBox(width: 6),
@@ -655,7 +671,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
               initial: row.contact,
               hint: '07xx xxx xxx',
               number: true,
-              onChanged: (v) => row.contact = v,
+              onChanged: (v) => setState(() => row.contact = v),
             ),
           ),
           IconButton(
@@ -677,6 +693,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
         children: rows.asMap().entries.map((e) {
           final row = e.value;
           return Container(
+            key: ObjectKey(row),
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -687,35 +704,47 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${tr('row')} ${e.key + 1}',
-                    style: const TextStyle(color: C.navy, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 9),
+                Row(children: [
+                  Expanded(
+                    child: Text('${tr('row')} ${e.key + 1}',
+                        style: const TextStyle(color: C.navy, fontWeight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    tooltip: tr('remove_row'),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: rows.length == 1
+                        ? null
+                        : () => setState(() => rows.removeAt(e.key)),
+                    icon: const Icon(Icons.delete_outline, color: C.muted),
+                  ),
+                ]),
+                const SizedBox(height: 4),
                 if (fungu) ...[
                   _field(
                     label: tr('envelope_no'),
                     initial: row.envelopeNo,
-                    onChanged: (v) => row.envelopeNo = v,
+                    onChanged: (v) => setState(() => row.envelopeNo = v),
                   ),
                   const SizedBox(height: 8),
                 ],
                 _field(
                   label: tr('donor_name'),
                   initial: row.donorName,
-                  onChanged: (v) => row.donorName = v,
+                  onChanged: (v) => setState(() => row.donorName = v),
                 ),
                 const SizedBox(height: 8),
                 _field(
                   label: tr('amount'),
                   initial: row.amount,
                   number: true,
-                  onChanged: (v) => row.amount = v,
+                  onChanged: (v) => setState(() => row.amount = v),
                 ),
                 const SizedBox(height: 8),
                 _field(
                   label: tr('contact'),
                   initial: row.contact,
                   number: true,
-                  onChanged: (v) => row.contact = v,
+                  onChanged: (v) => setState(() => row.contact = v),
                 ),
               ],
             ),
