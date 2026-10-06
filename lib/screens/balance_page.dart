@@ -19,7 +19,7 @@ class _BalancePageState extends State<BalancePage> {
   bool _loading=true; String? _error;
   Map<String,Object?> _stats={}; List<Map<String,Object?>> _funds=[]; List<Map<String,Object?>> _catsData=[]; List<String> _fundNames=[];
 
-  String money(Object? v){ final n=v is num?v.toDouble():double.tryParse('$v')??0; return n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'),(_)=>','); }
+  String money(Object? v){ final n=v is num?v.toDouble():double.tryParse('$v')??0; return n.round().toString(); }
   double numv(Object? v)=>v is num?v.toDouble():double.tryParse('$v')??0;
   String date(DateTime d)=>'${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
   Color catColor(String c){ switch(c){case 'MICHANGO':return C.blue;case 'MALIPO YA WAHUDUMU':return C.purple;case 'MALIPO YA HUDUMA':return C.teal;case 'MALIPO YA UNUNUZI NA MATENGENEZO':return C.gold;case 'UJENZI':return const Color(0xFF8D6E63);case 'IDARA':return const Color(0xFF546E7A);case 'AKIBA':return const Color(0xFF00897B);default:return C.navy;} }
