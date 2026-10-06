@@ -14,7 +14,7 @@ class LinkCodeDialog extends StatefulWidget {
 }
 
 class _LinkCodeDialogState extends State<LinkCodeDialog> {
-  String _role = 'viewer';
+  String _role = 'editor';
   LinkCode? _code;
   bool _busy = false;
   String? _error;
@@ -114,13 +114,10 @@ class _LinkCodeDialogState extends State<LinkCodeDialog> {
               if (_expired) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(tr('link_code_expired'), style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w700))),
               Text(tr('link_code_role'), style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                value: _role,
-                isExpanded: true,
-                items: [
-                  for (final r in const ['viewer', 'editor', 'treasurer']) DropdownMenuItem(value: r, child: Text(tr('role_${r}_desc'), overflow: TextOverflow.ellipsis)),
-                ],
-                onChanged: _busy ? null : (v) => setState(() => _role = v ?? 'viewer'),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: C.teal.withOpacity(.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: C.teal.withOpacity(.22))),
+                child: Text(tr('role_editor_desc'), style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               const SizedBox(height: 14),
               ElevatedButton.icon(
