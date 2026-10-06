@@ -804,22 +804,44 @@ class AppDb {
   }
 
   Future<List<Map<String, Object?>>> getContributionDetailsForDay(String day) async {
-    return db.rawQuery('''
-      SELECT b.id AS batch_id, b.date, b.type, b.service, b.title, b.created_at,
-             f.id AS row_id, f.envelope_no, f.donor_name, f.contact, f.amount,
-             f.receipt_no, NULL AS contribution_name, NULL AS name_no
+    // Maswali mawili tofauti (badala ya UNION ALL) ili Android na Windows zitoe
+    // matokeo sawa; kiasi kinalazimishwa kuwa namba (REAL).
+    final fungu = await db.rawQuery('''
+      SELECT b.id AS batch_id, b.date AS date, 'FUNGU' AS type,
+             COALESCE(b.service, 1) AS service, b.title AS title, b.created_at AS created_at,
+             f.id AS row_id, f.envelope_no AS envelope_no, f.donor_name AS donor_name,
+             f.contact AS contact, CAST(COALESCE(f.amount, 0) AS REAL) AS amount,
+             f.receipt_no AS receipt_no
       FROM contribution_batches b
-      JOIN fungu_contributions f ON f.batch_id=b.id
-      WHERE substr(b.date,1,10)=?
-      UNION ALL
-      SELECT b.id AS batch_id, b.date, b.type, b.service, b.title, b.created_at,
-             o.id AS row_id, NULL AS envelope_no, o.donor_name, o.contact, o.amount,
-             o.receipt_no, o.contribution_name, o.name_no
+      JOIN fungu_contributions f ON f.batch_id = b.id
+      WHERE substr(b.date,1,10) = ?
+      ORDER BY b.id ASC, f.id ASC
+    ''', [day]);
+    final other = await db.rawQuery('''
+      SELECT b.id AS batch_id, b.date AS date, 'OTHER' AS type,
+             COALESCE(b.service, 1) AS service, b.title AS title, b.created_at AS created_at,
+             o.id AS row_id, o.donor_name AS donor_name, o.contact AS contact,
+             CAST(COALESCE(o.amount, 0) AS REAL) AS amount, o.receipt_no AS receipt_no,
+             o.contribution_name AS contribution_name, o.name_no AS name_no
       FROM contribution_batches b
-      JOIN other_contributions o ON o.batch_id=b.id
-      WHERE substr(b.date,1,10)=?
-      ORDER BY service ASC, type ASC, batch_id ASC, row_id ASC
-    ''', [day, day]);
+      JOIN other_contributions o ON o.batch_id = b.id
+      WHERE substr(b.date,1,10) = ?
+      ORDER BY b.id ASC, o.id ASC
+    ''', [day]);
+    final out = <Map<String, Object?>>[
+      for (final r in fungu) {...r, 'contribution_name': null, 'name_no': null},
+      for (final r in other) {...r, 'envelope_no': null},
+    ];
+    out.sort((x, y) {
+      final s = ((x['service'] as num?) ?? 1).compareTo((y['service'] as num?) ?? 1);
+      if (s != 0) return s;
+      final t = '${x['type']}'.compareTo('${y['type']}');
+      if (t != 0) return t;
+      final bch = ((x['batch_id'] as num?) ?? 0).compareTo((y['batch_id'] as num?) ?? 0);
+      if (bch != 0) return bch;
+      return ((x['row_id'] as num?) ?? 0).compareTo((y['row_id'] as num?) ?? 0);
+    });
+    return out;
   }
 
   Future<int> updateFunguContribution({required int id, required String envelopeNo, required String donorName, required String contact, required double amount}) async {
