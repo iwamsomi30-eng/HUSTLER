@@ -298,7 +298,7 @@ class _SettingsPageState extends State<SettingsPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [C.navy, C.navyDark]),
+          color: C.navy,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
