@@ -22,7 +22,7 @@ class LangToggle extends StatelessWidget {
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: phone ? 9 : 12, vertical: 7),
               decoration: BoxDecoration(
-                color: sel ? C.teal : Colors.transparent,
+                color: sel ? C.activeStart : Colors.transparent,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
