@@ -96,7 +96,7 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
   Widget _header() => Container(
     padding: const EdgeInsets.all(22),
     decoration: BoxDecoration(
-      gradient: const LinearGradient(colors: [C.navy, C.navyDark]),
+      color: C.navy,
       borderRadius: BorderRadius.circular(16),
       boxShadow: [BoxShadow(color: C.navy.withOpacity(.12), blurRadius: 18, offset: const Offset(0, 8))],
     ),
