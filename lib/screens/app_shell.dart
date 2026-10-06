@@ -169,7 +169,7 @@ class _Sidebar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
-        color: sel ? C.teal : Colors.transparent,
+        color: sel ? C.activeStart : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -178,12 +178,12 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(n.icon, color: Colors.white, size: 20),
+                Icon(n.icon, color: sel ? Colors.white : const Color(0xFFD9E7FF), size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(tr(n.key),
                       style: TextStyle(
-                          color: Colors.white,
+                          color: sel ? Colors.white : const Color(0xFFE6F0FF),
                           fontSize: 14,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
                 ),
@@ -197,11 +197,15 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Solid opaque color is intentionally used instead of a gradient here:
-    // it renders consistently on Flutter Windows and prevents white/transparent
-    // sidebar backgrounds on some desktop graphics drivers.
+    // Branded dark-blue gradient inspired by the supplied reference screens.
     return Container(
-      color: C.navy,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [C.sidebarStart, C.sidebarEnd],
+        ),
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -209,7 +213,7 @@ class _Sidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
               child: Row(
                 children: [
-                  const Icon(Icons.church, color: C.gold, size: 34),
+                  const Icon(Icons.church, color: Colors.white, size: 34),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(tr('app_name_short'),
@@ -284,7 +288,13 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final narrow = MediaQuery.of(context).size.width < 600;
     return Container(
-      color: Colors.white,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [C.topStart, C.topMid, C.topEnd],
+        ),
+      ),
       padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 16, vertical: narrow ? 8 : 12),
       child: SafeArea(
         bottom: false,
@@ -293,7 +303,7 @@ class _TopBar extends StatelessWidget {
             if (showMenu)
               IconButton(
                   onPressed: onMenu,
-                  icon: const Icon(Icons.menu, color: C.navy)),
+                  icon: const Icon(Icons.menu, color: Colors.white)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,11 +313,11 @@ class _TopBar extends StatelessWidget {
                       style: TextStyle(
                           fontSize: narrow ? 17 : 21,
                           fontWeight: FontWeight.w800,
-                          color: C.navy)),
+                          color: Colors.white)),
                   if (subtitle != null && !narrow)
                     Text(subtitle!,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13, color: C.muted)),
+                        style: const TextStyle(fontSize: 13, color: Color(0xFFDCE8FF))),
                 ],
               ),
             ),
@@ -321,29 +331,29 @@ class _TopBar extends StatelessWidget {
                   icon: const Badge(
                     backgroundColor: Colors.red,
                     smallSize: 9,
-                    child: Icon(Icons.system_update, color: C.blue),
+                    child: Icon(Icons.system_update, color: Colors.white),
                   ),
                 );
               },
             ),
-            const LangToggle(),
+            const LangToggle(onDark: true),
             if (!narrow) ...[
               const SizedBox(width: 12),
-              const Icon(Icons.notifications_none, color: C.navy),
+              const Icon(Icons.notifications_none, color: Colors.white),
               const SizedBox(width: 12),
               const CircleAvatar(
                   radius: 18,
-                  backgroundColor: C.navy,
-                  child: Icon(Icons.person, color: Colors.white, size: 20)),
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, color: C.blue, size: 20)),
               const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(tr('admin'),
                       style: const TextStyle(
-                          fontWeight: FontWeight.w700, color: C.text)),
+                          fontWeight: FontWeight.w700, color: Colors.white)),
                   Text(tr('admin_role'),
-                      style: const TextStyle(fontSize: 11, color: C.muted)),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFFDCE8FF))),
                 ],
               ),
             ],
