@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import '../core/auth.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
@@ -21,11 +22,18 @@ class _CloudLoginDialogState extends State<CloudLoginDialog> {
     setState(()=>busy=true);
     try {
       await CloudService.signIn(email: email.text, password: password.text);
-      await CloudService.currentRole();
+      final role = await CloudService.currentRole();
+      if (role == null) {
+        await CloudService.signOut();
+        if (mounted) setState(()=>error=tr('cloud_no_access'));
+        return;
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (_) {
+    } on AuthException catch (_) {
       if (mounted) setState(()=>error=tr('cloud_login_failed'));
+    } catch (_) {
+      if (mounted) setState(()=>error=tr('cloud_network_error'));
     } finally { if (mounted) setState(()=>busy=false); }
   }
 
