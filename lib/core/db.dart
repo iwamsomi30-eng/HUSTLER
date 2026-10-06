@@ -218,10 +218,10 @@ class AppDb {
   }
 
   Future<int> saveExpenditureBatch({
-    await _ensureWritable();
     required String date, required String category, required String fundName,
     required String note, required List<Map<String, Object?>> rows,
   }) async {
+    await _ensureWritable();
     if (rows.isEmpty) throw ArgumentError('At least one expenditure row is required');
     return db.transaction<int>((txn) async {
       final batchId = await txn.insert('expenditure_batches', {
