@@ -5,6 +5,7 @@ import '../core/db.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../widgets/lang_toggle.dart';
+import '../widgets/powered_by.dart';
 import 'link_device_page.dart';
 import '../services/cloud_service.dart';
 
@@ -207,6 +208,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     top: 12,
                     right: 16,
                     child: LangToggle(onDark: true),
+                  ),
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 14,
+                    child: Center(child: PoweredBy(onDark: true)),
                   ),
                 ],
               ),
