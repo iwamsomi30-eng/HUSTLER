@@ -52,13 +52,7 @@ class SmsService {
   }
 
   static String _money(double v) {
-    final s = v.round().toString();
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
-      b.write(s[i]);
-    }
-    return b.toString();
+    return v.round().toString();
   }
 
   static String message(SmsItem i) {
