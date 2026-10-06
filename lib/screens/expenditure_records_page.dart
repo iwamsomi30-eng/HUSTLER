@@ -44,7 +44,7 @@ class _ExpenditureRecordsPageState extends State<ExpenditureRecordsPage> {
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
   double _number(Object? value) => (value as num?)?.toDouble() ?? 0;
-  String _money(Object? value) => _number(value).round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => ',');
+  String _money(Object? value) => _number(value).round().toString();
   double get _filteredTotal => _records.fold<double>(0, (sum, row) => sum + _number(row['total']));
 
   Future<void> _pickDate(bool start) async {
