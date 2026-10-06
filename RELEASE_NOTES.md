@@ -1,2 +1,4 @@
-- Andika hapa mambo mapya uliyoboresha kwenye toleo hili (mstari mmoja kwa kila boresho).
-- Maandishi haya ndiyo yataonekana kwa watumiaji kwenye dirisha la "Toleo jipya".
+- Linked devices now work as equal peer devices: every linked device can view, add, edit and delete shared data.
+- Added near-real-time multi-device synchronization with Realtime updates plus automatic local-change upload.
+- Removed the old viewer write-block that caused the red “Imeshindikana kuhifadhi” error on linked devices.
+- Added conflict-safe synchronization so devices can work at the same time without one device locking another.
