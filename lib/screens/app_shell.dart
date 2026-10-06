@@ -244,7 +244,7 @@ class _TopBar extends StatelessWidget {
                 children: [
                   Text(title,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: narrow ? 17 : 21,
                           fontWeight: FontWeight.w800,
                           color: C.navy)),
