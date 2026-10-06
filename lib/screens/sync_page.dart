@@ -1,3 +1,4 @@
+import '../core/cloud_config.dart';
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
@@ -10,9 +11,9 @@ class _SyncPageState extends State<SyncPage> {
   bool busy=false; String? status; bool ok=false; String? device;
   @override void initState(){super.initState(); _load();}
   Future<void> _load() async { final d=await SyncService.deviceId(); if(mounted)setState(()=>device=d); }
-  Future<void> _login() async { if(!CloudService.available){setState(()=>status=CloudService.missingMessage());return;} final r=await showDialog<bool>(context:context,builder:(_)=>const CloudLoginDialog()); if(r==true&&mounted)setState(()=>status=tr('cloud_login_done')); }
+  Future<void> _login() async { if(!CloudService.available){setState(()=>status=CloudConfig.missingMessage());return;} final r=await showDialog<bool>(context:context,builder:(_)=>const CloudLoginDialog()); if(r==true&&mounted)setState(()=>status=tr('cloud_login_done')); }
   Future<void> _sync() async {
-    if(!CloudService.available){setState(()=>status=CloudService.missingMessage());return;}
+    if(!CloudService.available){setState(()=>status=CloudConfig.missingMessage());return;}
     if(CloudService.user==null){await _login(); if(CloudService.user==null)return;}
     setState(() { busy=true; status=null; ok=false; });
     try { final r=await CloudService.sync(); if(mounted)setState(() { ok=true; status='${tr('cloud_sync_done')} ${tr('cloud_uploaded')} ${r.uploaded} • ${tr('cloud_downloaded')} ${r.downloaded} • ${tr('cloud_conflicts')} ${r.conflicts}'; }); }
