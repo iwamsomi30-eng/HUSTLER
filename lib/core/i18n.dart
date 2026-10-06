@@ -241,6 +241,7 @@ class L10n extends ChangeNotifier {
       'sync_skipped': 'zilizorukwa',
       'sync_conflicts': 'conflicts',
       'sync_failed': 'Kusawazisha kumeshindikana. Hakikisha OTP na faili ni sahihi.',
+      'upd_title': 'Toleo jipya', 'upd_body': 'Kuna toleo jipya la app. Washa internet (weka bundle) kisha bonyeza "Sasisha sasa" ili kupata maboresho mapya.', 'upd_whats_new': 'Kipya kwenye toleo hili:', 'upd_later': 'Baadaye', 'upd_now': 'Sasisha sasa', 'upd_downloading': 'Inapakua...', 'upd_optional': 'Ukichagua Baadaye, unaweza kuendelea kutumia app kama kawaida.', 'upd_need_perm': 'Ruhusu app hii kusakinisha masasisho kwenye ukurasa utakaofunguka, kisha rudi na ubonyeze "Sasisha sasa" tena.', 'upd_failed': 'Imeshindikana kupakua. Hakikisha una internet kisha jaribu tena.', 'upd_check': 'Angalia masasisho', 'upd_checking': 'Inaangalia...', 'upd_uptodate': 'Una toleo jipya zaidi tayari.', 'upd_offline': 'Imeshindikana kuangalia. Hakikisha una internet.', 'upd_tooltip': 'Toleo jipya linapatikana',
     },
     'en': {
       'app_name': 'CHURCH INCOME FUND',
@@ -462,6 +463,7 @@ class L10n extends ChangeNotifier {
       'sync_skipped': 'skipped',
       'sync_conflicts': 'conflicts',
       'sync_failed': 'Synchronization failed. Check the OTP and file.',
+      'upd_title': 'New version', 'upd_body': 'A new version of the app is available. Turn on internet (buy a bundle) then tap "Update now" to get the latest improvements.', 'upd_whats_new': 'What is new in this version:', 'upd_later': 'Later', 'upd_now': 'Update now', 'upd_downloading': 'Downloading...', 'upd_optional': 'If you choose Later, you can keep using the app as usual.', 'upd_need_perm': 'Allow this app to install updates on the page that opens, then come back and tap "Update now" again.', 'upd_failed': 'Download failed. Make sure you have internet and try again.', 'upd_check': 'Check for updates', 'upd_checking': 'Checking...', 'upd_uptodate': 'You already have the latest version.', 'upd_offline': 'Could not check. Make sure you have internet.', 'upd_tooltip': 'New version available',
     },
   };
 }
