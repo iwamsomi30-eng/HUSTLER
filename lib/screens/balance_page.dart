@@ -46,7 +46,7 @@ class _BalancePageState extends State<BalancePage> {
             onRefresh: _load,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 42),
+              padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 42),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1280),
