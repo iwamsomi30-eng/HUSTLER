@@ -47,7 +47,7 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
   }
 
   String _money(Object? value) {
-    final n = (value as num?)?.toDouble() ?? 0;
+    final n = safeNum(value);
     final s = n.round().toString();
     return '${s.replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
   }
@@ -73,7 +73,7 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
         onRefresh: _load,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+          padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1220),
@@ -200,7 +200,6 @@ class ContributionDayDetailPage extends StatefulWidget {
 
 class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
   List<Map<String, Object?>> _rows = [];
-  Map<String, Object?> _stats = {};
   bool _loading = true;
   bool _showNames = true;
 
@@ -210,8 +209,7 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final rows = await AppDb.instance.getContributionDetailsForDay(widget.day);
-    final stats = await AppDb.instance.contributionDayStats(widget.day);
-    if (mounted) setState(() { _rows = rows; _stats = stats; _loading = false; });
+    if (mounted) setState(() { _rows = rows; _loading = false; });
   }
 
   String _date(String raw) {
@@ -221,16 +219,19 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
   }
 
   String _money(Object? value) {
-    final n = (value as num?)?.toDouble() ?? 0;
+    final n = safeNum(value);
     return '${n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
   }
 
-  double get _total => _rows.fold(0, (s, r) => s + ((r['amount'] as num?)?.toDouble() ?? 0));
+  double _sumWhere(bool Function(Map<String, Object?>) test) =>
+      _rows.where(test).fold<double>(0, (s, r) => s + safeNum(r['amount']));
+  int _countWhere(bool Function(Map<String, Object?>) test) => _rows.where(test).length;
+  double get _total => _sumWhere((_) => true);
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text('${tr('nav_michango_records')} • ${_date(widget.day)}'),
+      title: Text(isPhone(context) ? _date(widget.day) : '${tr('nav_michango_records')} • ${_date(widget.day)}'),
       actions: [
         IconButton(onPressed: _loading ? null : () => ContributionExportService.sharePdf(day: widget.day, rows: _rows), tooltip: 'PDF', icon: const Icon(Icons.picture_as_pdf)),
         IconButton(onPressed: _loading ? null : () => ContributionExportService.shareExcel(day: widget.day, rows: _rows), tooltip: 'Excel', icon: const Icon(Icons.table_view)),
@@ -240,7 +241,7 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
       onRefresh: _load,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+        padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
         child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1220), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _hero(),
           const SizedBox(height: 14),
@@ -258,14 +259,14 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
     child: LayoutBuilder(builder: (context, box) {
       final compact = box.maxWidth < 700;
       final cards = [
-        _metric(tr('fungu'), _money(_stats['fungu_total']), '${_stats['fungu_count'] ?? 0} ${tr('records_entries')}'),
-        _metric(tr('other_contributions'), _money(_stats['other_total']), '${_stats['other_count'] ?? 0} ${tr('records_entries')}'),
+        _metric(tr('fungu'), _money(_sumWhere((r) => r['type'] == 'FUNGU')), '${_countWhere((r) => r['type'] == 'FUNGU')} ${tr('records_entries')}'),
+        _metric(tr('other_contributions'), _money(_sumWhere((r) => r['type'] != 'FUNGU')), '${_countWhere((r) => r['type'] != 'FUNGU')} ${tr('records_entries')}'),
         _metric(tr('total'), _money(_total), '${_rows.length} ${tr('records_entries')}'),
       ];
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('record_day_title'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: C.navy)), const SizedBox(height: 4), Text(_date(widget.day), style: const TextStyle(color: C.muted))])), const Icon(Icons.verified_outlined, color: C.teal)]),
         const SizedBox(height: 16),
-        if (compact) Column(children: [for (final c in cards) Padding(padding: const EdgeInsets.only(bottom: 8), child: c)]) else Row(children: [for (var i=0; i<cards.length; i++) Expanded(child: Padding(padding: EdgeInsets.only(right: i==cards.length-1?0:10), child: cards[i]))]),
+        if (compact) Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final c in cards) Padding(padding: const EdgeInsets.only(bottom: 8), child: c)]) else Row(children: [for (var i=0; i<cards.length; i++) Expanded(child: Padding(padding: EdgeInsets.only(right: i==cards.length-1?0:10), child: cards[i]))]),
       ]);
     }),
   );
@@ -285,12 +286,35 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
 
   Widget _batchCard(Map<String, Object?> head, List<Map<String, Object?>> rows) {
     final isFungu = head['type'] == 'FUNGU';
-    final total = rows.fold<double>(0, (s, r) => s + ((r['amount'] as num?)?.toDouble() ?? 0));
+    final total = rows.fold<double>(0, (s, r) => s + safeNum(r['amount']));
     return Padding(padding: const EdgeInsets.only(bottom: 12), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Container(width: 38, height: 38, decoration: BoxDecoration(color: (isFungu ? C.teal : C.gold).withOpacity(.12), borderRadius: BorderRadius.circular(10)), child: Icon(isFungu ? Icons.mail_outline : Icons.volunteer_activism_outlined, color: isFungu ? C.teal : C.gold)), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isFungu ? tr('fungu') : (head['title'] ?? tr('other_contributions')).toString(), style: const TextStyle(fontWeight: FontWeight.w800, color: C.text)), const SizedBox(height: 2), Text('IBADA ${head['service']} • ${rows.length} ${tr('records_entries')}', style: const TextStyle(fontSize: 12, color: C.muted))])), Text(_money(total), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy))]),
       const SizedBox(height: 12),
-      SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : 'MCH No.')), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)))])).toList())),
+      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : 'MCH No.')), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)))])).toList())),
     ])));
+  }
+
+  Widget _phoneRow(Map<String, Object?> r, bool isFungu) {
+    final number = (isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '';
+    final name = _showNames ? (r['donor_name'] ?? '').toString() : (number.isEmpty ? '••••••' : number);
+    final contact = (r['contact'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(color: const Color(0xFFFAFCFF), borderRadius: BorderRadius.circular(10), border: Border.all(color: C.border)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${isFungu ? tr('envelope_no') : 'MCH No.'}: ${number.isEmpty ? '—' : number}', style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy, fontSize: 13)),
+          const SizedBox(height: 3),
+          Text(name.isEmpty ? '—' : name, style: const TextStyle(color: C.text, fontSize: 13)),
+          if (contact.isNotEmpty) ...[const SizedBox(height: 2), Text(contact, style: const TextStyle(color: C.muted, fontSize: 12))],
+        ])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Padding(padding: const EdgeInsets.only(right: 8, top: 2), child: Text(_money(r['amount']), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy, fontSize: 13))),
+          IconButton(tooltip: tr('edit'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
+        ]),
+      ]),
+    );
   }
 
   Future<void> _editRow(Map<String, Object?> row) async {
@@ -350,7 +374,7 @@ class _EditContributionDialogState extends State<_EditContributionDialog> {
 
   @override Widget build(BuildContext context) => AlertDialog(
     title: Text(tr('edit_record')),
-    content: SizedBox(width: 480, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+    content: SizedBox(width: MediaQuery.sizeOf(context).width < 560 ? double.maxFinite : 480, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (!isFungu) _field(_contribution, tr('contribution_name')),
       _field(_number, isFungu ? tr('envelope_no') : 'MCH No.', enabled: false),
       _field(_name, tr('donor_name')),
