@@ -96,13 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
       builder: (context, _) {
         return Scaffold(
           body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [C.navy, C.navyDark],
-              ),
-            ),
+            decoration: const BoxDecoration(color: C.navy),
             child: SafeArea(
               child: Stack(
                 children: [
