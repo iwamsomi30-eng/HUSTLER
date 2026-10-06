@@ -87,15 +87,15 @@ using (public.is_church_member(church_id));
 drop policy if exists sync_insert_editor on public.sync_records;
 create policy sync_insert_editor on public.sync_records for insert to authenticated
 with check (public.is_church_member(church_id)
-  and public.church_role(church_id) in ('admin','treasurer','editor')
+  and public.church_role(church_id) in ('admin','treasurer','editor','viewer')
   and updated_by = auth.uid());
 
 drop policy if exists sync_update_editor on public.sync_records;
 create policy sync_update_editor on public.sync_records for update to authenticated
 using (public.is_church_member(church_id)
-  and public.church_role(church_id) in ('admin','treasurer','editor'))
+  and public.church_role(church_id) in ('admin','treasurer','editor','viewer'))
 with check (public.is_church_member(church_id)
-  and public.church_role(church_id) in ('admin','treasurer','editor')
+  and public.church_role(church_id) in ('admin','treasurer','editor','viewer')
   and updated_by = auth.uid());
 
 drop policy if exists device_select_self on public.device_registry;
@@ -132,7 +132,7 @@ declare
 begin
   if not public.is_church_member(p_church_id) then raise exception 'NO_ACCESS'; end if;
   r := public.church_role(p_church_id);
-  if r not in ('admin','treasurer','editor') then raise exception 'READ_ONLY'; end if;
+  if r not in ('admin','treasurer','editor','viewer') then raise exception 'READ_ONLY'; end if;
 
   select updated_at into old_updated from public.sync_records
     where church_id=p_church_id and entity_type=p_entity_type and sync_id=p_sync_id;
