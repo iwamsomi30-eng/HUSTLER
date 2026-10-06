@@ -65,7 +65,7 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
     super.dispose();
   }
 
-  String _money(double value) => value.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => ',');
+  String _money(double value) => value.round().toString();
   double _num(String v) => double.tryParse(v.replaceAll(',', '').trim()) ?? 0;
   double get _total => _rows.fold(0, (s, r) => s + _num(r.amount.text));
 
