@@ -229,7 +229,7 @@ class _TopBar extends StatelessWidget {
     final narrow = MediaQuery.of(context).size.width < 600;
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 16, vertical: narrow ? 8 : 12),
       child: SafeArea(
         bottom: false,
         child: Row(
@@ -245,7 +245,7 @@ class _TopBar extends StatelessWidget {
                   Text(title,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 21,
+                          fontSize: narrow ? 17 : 21,
                           fontWeight: FontWeight.w800,
                           color: C.navy)),
                   if (subtitle != null && !narrow)
