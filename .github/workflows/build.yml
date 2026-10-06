@@ -22,6 +22,22 @@ jobs:
       - name: Ruhusu internet kwa cloud sync
         shell: bash
         run: sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+      - name: Ruhusa ya kutuma SMS (uthibitisho wa michango)
+        shell: bash
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\    <uses-feature android:name="android.hardware.telephony" android:required="false" />' "$M"
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.SEND_SMS" />' "$M"
+          F=$(find android/app/src/main -name 'MainActivity.kt' | head -n1)
+          PKG=$(grep -m1 '^package ' "$F" | sed 's/^package //; s/[[:space:]]*$//')
+          sed "s/__PKG__/$PKG/" branding/android/MainActivity.kt.txt > "$F"
+          echo "MainActivity: $F (package $PKG)"
+      - name: Weka logo kama icon na launch screen
+        shell: bash
+        run: |
+          rm -rf android/app/src/main/res/mipmap-*
+          cp -r branding/android/res/. android/app/src/main/res/
+          find android/app/src/main/res -name 'ic_launcher*' | sort
       - name: Jina la app
         run: sed -i 's/android:label="[^"]*"/android:label="Mfuko wa Mapato ya Kanisa"/' android/app/src/main/AndroidManifest.xml
       - name: Lazimisha compileSdk 36 kwa plugins zote
@@ -87,6 +103,9 @@ jobs:
       - name: Jina la dirisha
         shell: bash
         run: sed -i 's/L"mfuko_wa_kanisa"/L"MFUKO WA MAPATO YA KANISA"/' windows/runner/main.cpp
+      - name: Weka logo kama icon ya Windows
+        shell: bash
+        run: cp branding/windows/app_icon.ico windows/runner/resources/app_icon.ico
       - run: flutter pub get
       - name: Hakiki Supabase secrets
         shell: bash
