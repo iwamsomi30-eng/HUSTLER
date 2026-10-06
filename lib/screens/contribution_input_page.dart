@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/db.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
+import '../services/sms_service.dart';
 
 enum ContributionKind { fungu, other }
 
@@ -37,6 +38,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   final _dateLabel = TextEditingController();
   final _fundName = TextEditingController();
   ContributionKind _kind = ContributionKind.fungu;
+  bool _sendSms = true;
 
   final List<ContributionRow> _funguI = [ContributionRow()];
   final List<ContributionRow> _funguII = [ContributionRow()];
@@ -47,6 +49,9 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   void initState() {
     super.initState();
     _syncDateLabel();
+    AppDb.instance.getSetting('sms_receipts').then((v) {
+      if (mounted && v != null) setState(() => _sendSms = v != '0');
+    });
   }
 
   @override
@@ -116,33 +121,48 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
     }
 
     try {
+      final List<Map<String, Object?>> prepared = [
+        for (final row in valid)
+          {
+            'envelopeNo': row.envelopeNo.trim(),
+            'donorName': row.donorName.trim(),
+            'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
+            'amount': double.parse(row.amount.replaceAll(',', '')),
+            'receiptNo': _receipt(),
+          },
+      ];
       final batchId = await AppDb.instance.saveFunguBatch(
         date: _date.toIso8601String(),
         service: service,
         title: 'Fungu',
         fundName: _fundName.text,
-        rows: [
-          for (final row in valid)
-            {
-              'envelopeNo': row.envelopeNo.trim(),
-              'donorName': row.donorName.trim(),
-              'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
-              'amount': double.parse(row.amount.replaceAll(',', '')),
-              'receiptNo': _receipt(),
-            },
-        ],
+        rows: prepared,
       );
       await AppDb.instance.audit(
         'CONTRIBUTION_FUNGU_SAVED',
         'batch=$batchId; service=$service; rows=${valid.length}; total=${_sum(valid)}',
       );
+      final smsItems = [
+        for (final m in prepared)
+          SmsItem(
+            donorName: m['donorName'] as String,
+            contact: (m['contact'] as String?) ?? '',
+            amount: m['amount'] as double,
+            purpose: _fundName.text.trim(),
+            date: _date,
+            receiptNo: m['receiptNo'] as String,
+          ),
+      ];
+      final total = _sum(valid);
 
       setState(() {
         rows
           ..clear()
           ..add(ContributionRow());
       });
-      _snack('${tr('saved_successfully')}  ${_money(_sum(valid))} TZS');
+      _snack('${tr('saved_successfully')}  ${_money(total)} TZS');
+      final smsNote = await _notifyDonors(smsItems, 'fungu batch=$batchId');
+      if (smsNote.isNotEmpty && mounted) _snack('${tr('saved_successfully')}  ${_money(total)} TZS$smsNote');
     } catch (_) {
       _snack(tr('save_failed'), error: true);
     }
@@ -169,36 +189,68 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
     }
 
     try {
+      final List<Map<String, Object?>> prepared = [
+        for (final row in valid)
+          {
+            'contributionName': title,
+            'donorName': row.donorName.trim(),
+            'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
+            'amount': double.parse(row.amount.replaceAll(',', '')),
+            'receiptNo': _receipt(),
+          },
+      ];
       final batchId = await AppDb.instance.saveOtherBatch(
         date: _date.toIso8601String(),
         service: service,
         title: title,
         fundName: _fundName.text,
-        rows: [
-          for (final row in valid)
-            {
-              'contributionName': title,
-              'donorName': row.donorName.trim(),
-              'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
-              'amount': double.parse(row.amount.replaceAll(',', '')),
-              'receiptNo': _receipt(),
-            },
-        ],
+        rows: prepared,
       );
       await AppDb.instance.audit(
         'CONTRIBUTION_OTHER_SAVED',
         'batch=$batchId; service=$service; title=$title; rows=${valid.length}; total=${_sum(valid)}',
       );
+      final smsItems = [
+        for (final m in prepared)
+          SmsItem(
+            donorName: m['donorName'] as String,
+            contact: (m['contact'] as String?) ?? '',
+            amount: m['amount'] as double,
+            purpose: '$title (${_fundName.text.trim()})',
+            date: _date,
+            receiptNo: m['receiptNo'] as String,
+          ),
+      ];
+      final total = _sum(valid);
 
       setState(() {
         rows
           ..clear()
           ..add(ContributionRow());
       });
-      _snack('${tr('saved_successfully')}  ${_money(_sum(valid))} TZS');
+      _snack('${tr('saved_successfully')}  ${_money(total)} TZS');
+      final smsNote = await _notifyDonors(smsItems, 'other batch=$batchId');
+      if (smsNote.isNotEmpty && mounted) _snack('${tr('saved_successfully')}  ${_money(total)} TZS$smsNote');
     } catch (_) {
       _snack(tr('save_failed'), error: true);
     }
+  }
+
+  /// Inatuma SMS ya "malipo yamepokelewa" baada ya data kuhifadhiwa. Inarudisha ujumbe wa muhtasari.
+  Future<String> _notifyDonors(List<SmsItem> items, String batchLabel) async {
+    if (!_sendSms) return '';
+    final r = await SmsService.sendReceipts(items);
+    if (r.nothing) return '';
+    if (r.unsupported) return '\n${tr('sms_unsupported')}';
+    if (r.permissionDenied) return '\n${tr('sms_permission_denied')}';
+    try {
+      await AppDb.instance.audit('SMS_RECEIPTS', '$batchLabel; sent=${r.sent}; failed=${r.failed}; invalid=${r.invalid}');
+    } catch (_) {}
+    final b = StringBuffer();
+    if (r.sent > 0) b.write('\n${tr('sms_sent')}: ${r.sent}');
+    if (r.failed > 0) b.write('\n${tr('sms_failed')}: ${r.failed}');
+    if (r.invalid > 0) b.write('\n${tr('sms_invalid')}: ${r.invalid}');
+    return b.toString();
   }
 
   void _snack(String message, {bool error = false}) {
@@ -360,6 +412,20 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
               selected: {_kind},
               onSelectionChanged: (s) => setState(() => _kind = s.first),
             );
+          final sms = SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            secondary: const Icon(Icons.sms_outlined, color: C.teal),
+            title: Text(tr('sms_toggle'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: C.navy)),
+            subtitle: Text(SmsService.supported ? tr('sms_toggle_sub') : tr('sms_unsupported'), style: const TextStyle(fontSize: 11.5, color: C.muted)),
+            value: _sendSms && SmsService.supported,
+            onChanged: SmsService.supported
+                ? (v) {
+                    setState(() => _sendSms = v);
+                    AppDb.instance.setSetting('sms_receipts', v ? '1' : '0');
+                  }
+                : null,
+          );
           if (narrow) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -369,10 +435,12 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
                 date,
                 const SizedBox(height: 12),
                 kind,
+                const SizedBox(height: 6),
+                sms,
               ],
             );
           }
-          return Column(children: [Row(children: [Expanded(child: fund), const SizedBox(width: 14), Expanded(child: date)]), const SizedBox(height: 14), kind]);
+          return Column(children: [Row(children: [Expanded(child: fund), const SizedBox(width: 14), Expanded(child: date)]), const SizedBox(height: 14), kind, const SizedBox(height: 6), sms]);
         },
       ),
     );
