@@ -14,6 +14,16 @@ class C {
   static const border = Color(0xFFDCE4F0);
 }
 
+/// Pembezoni za ukurasa: ndogo kwenye simu ili maudhui yasibanwe.
+double pagePad(BuildContext c) => MediaQuery.sizeOf(c).width < 600 ? 12.0 : 20.0;
+bool isPhone(BuildContext c) => MediaQuery.sizeOf(c).width < 600;
+
+/// Kusoma namba kwa usalama (num au String) - inazuia jumla kuwa 0 kimakosa.
+double safeNum(Object? v) {
+  if (v is num) return v.toDouble();
+  return double.tryParse('${v ?? ''}'.replaceAll(',', '').trim()) ?? 0;
+}
+
 ThemeData buildTheme() {
   return ThemeData(
     useMaterial3: true,
