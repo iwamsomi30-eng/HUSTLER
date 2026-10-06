@@ -134,7 +134,7 @@ class _ExpenditureRecordsPageState extends State<ExpenditureRecordsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: L10n.instance, builder: (context, _) => RefreshIndicator(onRefresh: _load, child: SingleChildScrollView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.fromLTRB(20, 20, 20, 36), child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1250), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) => ListenableBuilder(listenable: L10n.instance, builder: (context, _) => RefreshIndicator(onRefresh: _load, child: SingleChildScrollView(physics: const AlwaysScrollableScrollPhysics(), padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36), child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1250), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     _header(), const SizedBox(height: 16), _filters(), const SizedBox(height: 14), _totals(), const SizedBox(height: 14),
     if (_loading) const Padding(padding: EdgeInsets.all(44), child: Center(child: CircularProgressIndicator())) else if (_records.isEmpty) _empty() else ..._records.map(_recordCard),
   ]))))));
