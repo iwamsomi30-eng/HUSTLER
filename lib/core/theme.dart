@@ -37,6 +37,20 @@ ThemeData buildTheme() {
     cardColor: Colors.white,
     visualDensity: VisualDensity.standard,
     dividerColor: C.border,
+    // Scrollbar (hasa ya wima kwenye computer): bluu na nene ili ionekane na kutumika kirahisi.
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.dragged) || states.contains(WidgetState.hovered)
+              ? const Color(0xFF0B4FA8)
+              : C.blue),
+      trackColor: WidgetStateProperty.all(const Color(0xFFDCEBFF)),
+      trackBorderColor: WidgetStateProperty.all(const Color(0xFFB9D4F7)),
+      thickness: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.hovered) || states.contains(WidgetState.dragged) ? 14.0 : 10.0),
+      radius: const Radius.circular(8),
+      interactive: true,
+      minThumbLength: 48,
+    ),
     textSelectionTheme: const TextSelectionThemeData(
       cursorColor: C.teal,
       selectionColor: Color(0x3320A995),
