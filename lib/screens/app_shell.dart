@@ -16,6 +16,7 @@ import 'expenditure_records_page.dart';
 import 'expenditure_summary_page.dart';
 import 'balance_page.dart';
 import 'sync_page.dart';
+import 'settings_page.dart';
 
 class _Nav {
   final IconData icon;
@@ -100,6 +101,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (_index == 5) return const ExpenditureSummaryPage();
     if (_index == 6) return const BalancePage();
     if (_index == 7) return const SyncPage();
+    if (_index == 8) return const SettingsPage();
     if (_index == 9) return const _AboutPage();
     return _ComingSoon(stage: _cur.stage);
   }
