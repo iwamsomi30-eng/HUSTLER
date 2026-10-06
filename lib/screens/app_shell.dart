@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../widgets/lang_toggle.dart';
+import '../widgets/powered_by.dart';
 import 'dashboard_page.dart';
 import 'contribution_input_page.dart';
 import 'contribution_records_page.dart';
@@ -92,6 +93,15 @@ class _AppShellState extends State<AppShell> {
                       onMenu: () => _key.currentState?.openDrawer(),
                     ),
                     Expanded(child: _page()),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(top: BorderSide(color: C.border)),
+                      ),
+                      child: const SafeArea(top: false, child: Center(child: PoweredBy(fontSize: 10.5))),
+                    ),
                   ],
                 ),
               ),
