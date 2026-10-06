@@ -103,22 +103,35 @@ jobs:
             --dart-define=GITHUB_REPO="${{ github.repository }}"
 
       # ========================================================
-      # DOWNLOAD INNO SETUP
+      # BUNDLE VISUAL C++ RUNTIME (so app starts on ANY Windows PC,
+      # even a fresh one that never installed Visual C++)
       # ========================================================
+
+      - name: Bundle Visual C++ runtime DLLs
+        shell: pwsh
+        run: |
+          $rel = "build\windows\x64\runner\Release"
+          $required = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          $optional = @("msvcp140_1.dll", "msvcp140_2.dll", "concrt140.dll")
+          foreach ($d in $required) {
+            $src = Join-Path $env:WINDIR "System32\$d"
+            if (-not (Test-Path $src)) { Write-Error "Missing required runtime: $d"; exit 1 }
+            Copy-Item $src $rel -Force
+          }
+          foreach ($d in $optional) {
+            $src = Join-Path $env:WINDIR "System32\$d"
+            if (Test-Path $src) { Copy-Item $src $rel -Force }
+          }
+          Get-ChildItem $rel -Filter *.dll | ForEach-Object { Write-Host $_.Name }
 
       - name: Install Inno Setup
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
 
-      # ========================================================
-      # CREATE PROFESSIONAL INSTALLER SCRIPT
-      # ========================================================
-
-      - name: Create Installer
+      - name: Create Installer Script
         shell: pwsh
         run: |
-
           New-Item -ItemType Directory -Force -Path installer | Out-Null
 
           @'
@@ -128,42 +141,33 @@ jobs:
           #define MyAppExeName "mfuko_wa_kanisa.exe"
 
           [Setup]
-
           AppId={{9F7A6D21-8A8B-4D53-9A91-7C1B7B7A9021}
-
           AppName={#MyAppName}
           AppVersion={#MyAppVersion}
           AppVerName={#MyAppName} {#MyAppVersion}
-
           AppPublisher={#MyAppPublisher}
-
           DefaultDirName={autopf}\MfukoWaKanisa
-
           DefaultGroupName={#MyAppName}
-
+          DisableProgramGroupPage=yes
           OutputDir=installer-output
-
           OutputBaseFilename=MFUKO-WA-KANISA-Setup-v{#MyAppVersion}
-
           Compression=lzma2/max
-
           SolidCompression=yes
-
+          ; 64-bit Windows (Intel/AMD, and ARM64 PCs through built-in emulation)
           ArchitecturesAllowed=x64compatible
           ArchitecturesInstallIn64BitMode=x64compatible
-
-          DisableProgramGroupPage=yes
-
-          PrivilegesRequired=admin
-
+          ; Windows 10 and Windows 11 (desktops, laptops, tablets)
+          MinVersion=10.0
+          ; Works without administrator rights; asks the user if they want all-users install
+          PrivilegesRequired=lowest
+          PrivilegesRequiredOverridesAllowed=dialog
+          CloseApplications=yes
+          RestartApplications=no
           WizardStyle=modern
-
           UninstallDisplayName={#MyAppName}
-
+          UninstallDisplayIcon={app}\{#MyAppExeName}
           Uninstallable=yes
-
           SetupIconFile=..\branding\windows\app_icon.ico
-
           VersionInfoVersion={#MyAppVersion}.0
           VersionInfoCompany={#MyAppPublisher}
           VersionInfoDescription={#MyAppName} Windows Installer
@@ -174,89 +178,56 @@ jobs:
           Name: "english"; MessagesFile: "compiler:Default.isl"
 
           [Tasks]
-          Name: "desktopicon"; \
-          Description: "Create a desktop shortcut"; \
-          GroupDescription: "Additional shortcuts:"; \
-          Flags: unchecked
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
           [Files]
-
-          Source: "..\build\windows\x64\runner\Release\*"; \
-          DestDir: "{app}"; \
-          Flags: ignoreversion recursesubdirs createallsubdirs
+          Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-
-          Name: "{autoprograms}\{#MyAppName}"; \
-          Filename: "{app}\{#MyAppExeName}"; \
-          WorkingDir: "{app}"
-
-          Name: "{autodesktop}\{#MyAppName}"; \
-          Filename: "{app}\{#MyAppExeName}"; \
-          WorkingDir: "{app}"; \
-          Tasks: desktopicon
+          Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
           [Run]
-
-          Filename: "{app}\{#MyAppExeName}"; \
-          Description: "Launch {#MyAppName}"; \
-          Flags: nowait postinstall skipifsilent
+          Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
           [UninstallDelete]
-
-          Type: filesandordirs; \
-          Name: "{app}"
-
-          [Code]
-
-          function InitializeSetup(): Boolean;
-          begin
-            Result := True;
-          end;
-
-          function InitializeWizard(): Boolean;
-          begin
-            Result := True;
-          end;
-
+          Type: filesandordirs; Name: "{app}"
           '@ | Set-Content installer\setup.iss -Encoding UTF8
-
-      # ========================================================
-      # BUILD SINGLE EXE INSTALLER
-      # ========================================================
 
       - name: Build Setup.exe
         shell: pwsh
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-            "installer\setup.iss"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\setup.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # ========================================================
-      # VERIFY INSTALLER
+      # VERIFY + TEST-INSTALL THE INSTALLER (silent install on runner)
       # ========================================================
 
-      - name: Verify installer
+      - name: Verify and test-install
         shell: pwsh
         run: |
-          $installer = Get-ChildItem `
-            "installer-output\*.exe" `
-            -ErrorAction Stop
-
-          Write-Host "====================================="
-          Write-Host "INSTALLER CREATED SUCCESSFULLY"
-          Write-Host "====================================="
+          $installer = Get-ChildItem "installer\installer-output\*.exe" -ErrorAction Stop | Select-Object -First 1
           Write-Host "File: $($installer.FullName)"
           Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
 
-      # ========================================================
-      # UPLOAD INSTALLER TO GITHUB ACTIONS
-      # ========================================================
+          $dir = Join-Path $env:RUNNER_TEMP "mfuko-test"
+          $p = Start-Process -FilePath $installer.FullName `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=`"$dir`"" `
+            -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "Installer exit code $($p.ExitCode)"; exit 1 }
+
+          foreach ($f in @("mfuko_wa_kanisa.exe","flutter_windows.dll","vcruntime140.dll","msvcp140.dll","vcruntime140_1.dll","data\app.so","data\icudtl.dat")) {
+            if (-not (Test-Path (Join-Path $dir $f))) { Write-Error "Missing after install: $f"; exit 1 }
+            Write-Host "OK  $f"
+          }
+          Write-Host "INSTALLER TEST PASSED"
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: MFUKO-WA-KANISA-Windows-Installer
-          path: installer-output/*.exe
+          path: installer/installer-output/*.exe
           retention-days: 30
 
       # ========================================================
@@ -268,7 +239,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            installer-output/*.exe
+            installer/installer-output/*.exe
           generate_release_notes: true
 
 
@@ -305,9 +276,133 @@ jobs:
             --org tz.mfuko \
             .
 
+      - name: Apply branding, permissions and compatibility fixes
+        run: |
+          python3 - "$APP_LABEL" <<'PY'
+          import pathlib, re, shutil, sys
+
+          root = pathlib.Path("android")
+          brand = pathlib.Path("branding/android")
+          app_label = sys.argv[1] if len(sys.argv) > 1 else "Mfuko wa Mapato ya Kanisa"
+
+          def fail(msg):
+              print("ERROR:", msg)
+              sys.exit(1)
+
+          # ---------- 1. package name ----------
+          gradle = None
+          for n in ("build.gradle.kts", "build.gradle"):
+              p = root / "app" / n
+              if p.exists():
+                  gradle = p
+                  break
+          if gradle is None:
+              fail("android/app/build.gradle(.kts) not found")
+          g = gradle.read_text(encoding="utf-8")
+          m = re.search(r'namespace\s*=?\s*["\']([^"\']+)["\']', g) or re.search(r'applicationId\s*=?\s*["\']([^"\']+)["\']', g)
+          if not m:
+              fail("cannot detect package name")
+          pkg = m.group(1)
+          print("package:", pkg)
+
+          # ---------- 2. AndroidManifest ----------
+          man = root / "app/src/main/AndroidManifest.xml"
+          s = man.read_text(encoding="utf-8")
+
+          perms = [
+              "android.permission.INTERNET",
+              "android.permission.ACCESS_NETWORK_STATE",
+              "android.permission.SEND_SMS",
+              "android.permission.REQUEST_INSTALL_PACKAGES",
+              "android.permission.CAMERA",
+          ]
+          feats = [
+              "android.hardware.telephony",
+              "android.hardware.camera",
+              "android.hardware.camera.autofocus",
+          ]
+          block = ""
+          for p in perms:
+              if f'"{p}"' not in s:
+                  block += f'    <uses-permission android:name="{p}" />\n'
+          for f in feats:
+              if f'"{f}"' not in s:
+                  block += f'    <uses-feature android:name="{f}" android:required="false" />\n'
+          if "<application" not in s:
+              fail("<application> not found in manifest")
+          s = s.replace("<application", block + "    <application", 1) if block else s
+
+          s = re.sub(r'android:label="[^"]*"', f'android:label="{app_label}"', s)
+
+          if "updateprovider" not in s:
+              provider = (
+                  f'        <provider\n'
+                  f'            android:name="{pkg}.UpdateFileProvider"\n'
+                  '            android:authorities="$' + '{applicationId}.updateprovider"\n'
+                  f'            android:exported="false"\n'
+                  f'            android:grantUriPermissions="true">\n'
+                  f'            <meta-data\n'
+                  f'                android:name="android.support.FILE_PROVIDER_PATHS"\n'
+                  f'                android:resource="@xml/update_paths" />\n'
+                  f'        </provider>\n'
+              )
+              s = s.replace("</application>", provider + "    </application>", 1)
+          man.write_text(s, encoding="utf-8")
+
+          # ---------- 3. MainActivity ----------
+          main_dir = root / "app/src/main"
+          existing = list(main_dir.glob("**/MainActivity.kt")) + list(main_dir.glob("**/MainActivity.java"))
+          target_dir = None
+          for e in existing:
+              target_dir = e.parent if target_dir is None else target_dir
+              e.unlink()
+          if target_dir is None:
+              target_dir = main_dir / "kotlin" / pathlib.Path(*pkg.split("."))
+          target_dir.mkdir(parents=True, exist_ok=True)
+          src = (brand / "MainActivity.kt.txt").read_text(encoding="utf-8").replace("__PKG__", pkg)
+          (target_dir / "MainActivity.kt").write_text(src, encoding="utf-8")
+          print("MainActivity ->", target_dir)
+
+          # ---------- 4. Icons, splash, update_paths.xml ----------
+          shutil.copytree(brand / "res", main_dir / "res", dirs_exist_ok=True)
+
+          # ---------- 5. Force compileSdk 36 on ALL plugins (fixes file_picker android-34 error) ----------
+          init = pathlib.Path.home() / ".gradle" / "init.d"
+          init.mkdir(parents=True, exist_ok=True)
+          (init / "force-compile-sdk.gradle").write_text('''
+          allprojects { p ->
+              p.afterEvaluate {
+                  if (p.hasProperty("android")) {
+                      try {
+                          p.android.compileSdk = 36
+                      } catch (Throwable e1) {
+                          try { p.android.compileSdkVersion(36) } catch (Throwable e2) {
+                              println("compileSdk override skipped for " + p.name)
+                          }
+                      }
+                  }
+              }
+          }
+          ''', encoding="utf-8")
+          print("init script written")
+          PY
+        env:
+          APP_LABEL: "Mfuko wa Mapato ya Kanisa"
+
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Validate Supabase configuration
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "SUPABASE secrets are missing."; exit 1
+          fi
+
+      # One universal APK containing armeabi-v7a + arm64-v8a + x86_64
+      # (do NOT use --split-per-abi, so it installs on every Android device)
       - name: Build APK
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -318,6 +413,18 @@ jobs:
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
             --dart-define=GITHUB_REPO="${{ github.repository }}"
+
+      - name: Verify APK compatibility
+        shell: bash
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          AAPT2=$(ls $ANDROID_HOME/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump badging "$APK" > badging.txt
+          grep -E "^(package|sdkVersion|targetSdkVersion|native-code|uses-feature)" badging.txt || true
+          grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt || { echo "INTERNET permission missing"; exit 1; }
+          if grep -q "^uses-feature: name='android.hardware.telephony'" badging.txt; then echo "telephony is REQUIRED - tablets cannot install"; exit 1; fi
+          if grep -q "^uses-feature: name='android.hardware.camera'" badging.txt; then echo "camera is REQUIRED - some devices cannot install"; exit 1; fi
+          echo "APK compatibility check passed"
 
       - name: Rename APK
         shell: bash
