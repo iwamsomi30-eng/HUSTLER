@@ -1,4 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import '../core/update_config.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../widgets/lang_toggle.dart';
@@ -42,9 +47,42 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _key = GlobalKey<ScaffoldState>();
   int _index = 0; // 0..6 main, 7 sync, 8 settings, 9 about
+  Timer? _updTimer;
+  String? _prompted; // toleo ambalo dirisha limeshaonyeshwa kwenye session hii
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkUpdate();
+    _updTimer = Timer.periodic(const Duration(hours: 1), (_) => _checkUpdate());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkUpdate();
+  }
+
+  /// Inaangalia toleo jipya kimya kimya; kama lipo inaonyesha dirisha mara moja
+  /// kwa kila toleo. Hakuna internet = hakuna kinachotokea, app inaendelea.
+  Future<void> _checkUpdate() async {
+    if (!UpdateConfig.enabled) return;
+    await UpdateService.instance.check();
+    final u = UpdateService.instance.available;
+    if (!mounted || u == null || _prompted == u.version) return;
+    _prompted = u.version;
+    await showUpdateDialog(context, u);
+  }
 
   _Nav get _cur => _index < 7 ? _navMain[_index] : _navBottom[_index - 7];
 
@@ -91,6 +129,10 @@ class _AppShellState extends State<AppShell> {
                       subtitle: _index == 0 ? tr('dash_sub') : null,
                       showMenu: !wide,
                       onMenu: () => _key.currentState?.openDrawer(),
+                      onUpdate: () {
+                        final u = UpdateService.instance.available;
+                        if (u != null) showUpdateDialog(context, u);
+                      },
                     ),
                     Expanded(child: _page()),
                     Container(
@@ -228,11 +270,13 @@ class _TopBar extends StatelessWidget {
   final String? subtitle;
   final bool showMenu;
   final VoidCallback onMenu;
+  final VoidCallback onUpdate;
   const _TopBar(
       {required this.title,
       this.subtitle,
       required this.showMenu,
-      required this.onMenu});
+      required this.onMenu,
+      required this.onUpdate});
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +308,21 @@ class _TopBar extends StatelessWidget {
                         style: const TextStyle(fontSize: 13, color: C.muted)),
                 ],
               ),
+            ),
+            ListenableBuilder(
+              listenable: UpdateService.instance,
+              builder: (context, _) {
+                if (UpdateService.instance.available == null) return const SizedBox.shrink();
+                return IconButton(
+                  tooltip: tr('upd_tooltip'),
+                  onPressed: onUpdate,
+                  icon: const Badge(
+                    backgroundColor: Colors.red,
+                    smallSize: 9,
+                    child: Icon(Icons.system_update, color: C.blue),
+                  ),
+                );
+              },
             ),
             const LangToggle(),
             if (!narrow) ...[
@@ -326,8 +385,40 @@ class _ComingSoon extends StatelessWidget {
   }
 }
 
-class _AboutPage extends StatelessWidget {
+class _AboutPage extends StatefulWidget {
   const _AboutPage();
+
+  @override
+  State<_AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<_AboutPage> {
+  String _ver = '';
+  bool _checking = false;
+  String? _msg;
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((i) {
+      if (mounted) setState(() => _ver = '${i.version} (${i.buildNumber})');
+    });
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _msg = null;
+    });
+    final ok = await UpdateService.instance.check(force: true);
+    if (!mounted) return;
+    final u = UpdateService.instance.available;
+    setState(() {
+      _checking = false;
+      _msg = !ok ? tr('upd_offline') : (u == null ? tr('upd_uptodate') : null);
+    });
+    if (u != null) await showUpdateDialog(context, u);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -355,8 +446,22 @@ class _AboutPage extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: C.muted)),
             const SizedBox(height: 12),
-            Text('${tr('version')} 0.1.0 (Stage 1)',
-                style: const TextStyle(color: C.text)),
+            Text('${tr('version')} $_ver', style: const TextStyle(color: C.text)),
+            if (UpdateConfig.enabled) ...[
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: _checking ? null : _check,
+                icon: const Icon(Icons.system_update, color: C.blue),
+                label: Text(_checking ? tr('upd_checking') : tr('upd_check')),
+              ),
+              if (_msg != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_msg!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: C.muted, fontSize: 12.5)),
+                ),
+            ],
           ],
         ),
       ),
