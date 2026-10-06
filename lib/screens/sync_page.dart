@@ -200,7 +200,6 @@ class _SyncPageState extends State<SyncPage> {
           _row(Icons.church_outlined, tr('link_church'), c.name),
           _row(Icons.verified_user_outlined, tr('link_role'), _roleLabel(c.role)),
           _row(Icons.devices_outlined, tr('sync_device_id'), device ?? '…'),
-          if (c.role == 'viewer') Padding(padding: const EdgeInsets.only(top: 6), child: Text(tr('link_viewer_note'), style: const TextStyle(color: C.muted))),
           const SizedBox(height: 14),
           Wrap(spacing: 10, runSpacing: 10, children: [
             ElevatedButton.icon(
