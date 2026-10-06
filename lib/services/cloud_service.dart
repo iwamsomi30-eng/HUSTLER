@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/cloud_config.dart';
@@ -57,6 +58,7 @@ class CloudService {
   static Future<void> initialize() async {
     if (!CloudConfig.configured) return;
     await Supabase.initialize(url: CloudConfig.url, publishableKey: CloudConfig.publishableKey);
+    startAutoSync();
   }
 
   // ---------------------------------------------------------------- hali ya kifaa
@@ -71,7 +73,8 @@ class CloudService {
     if (!available || user == null) return null;
     final id = await _get(_kChurchId);
     if (id == null) return null;
-    return CloudChurch(id: id, name: await _get(_kChurchName) ?? '', role: await _get(_kRole) ?? 'viewer');
+    final cachedRole = await _get(_kRole) ?? 'editor';
+    return CloudChurch(id: id, name: await _get(_kChurchName) ?? '', role: cachedRole == 'viewer' ? 'editor' : cachedRole);
   }
 
   static Future<void> _saveChurch(CloudChurch c, {bool resetSyncCursor = false}) async {
@@ -111,7 +114,7 @@ class CloudService {
     final church = CloudChurch(
       id: churchId,
       name: (c?['name'] as String?) ?? await _get(_kChurchName) ?? '',
-      role: row['role'] as String,
+      role: (row['role'] as String) == 'viewer' ? 'editor' : row['role'] as String,
     );
     await _saveChurch(church);
     return church;
@@ -167,7 +170,7 @@ class CloudService {
   static Future<LinkCode> createLinkCode({required String role}) async {
     final church = await cachedChurch();
     if (church == null) throw StateError('NO_CHURCH_ACCESS');
-    final res = await client.rpc('create_pairing_code', params: {'p_church_id': church.id, 'p_role': role});
+    final res = await client.rpc('create_pairing_code', params: {'p_church_id': church.id, 'p_role': 'editor'});
     final m = Map<String, dynamic>.from(res as Map);
     return LinkCode(
       id: m['id'] as String,
@@ -196,7 +199,8 @@ class CloudService {
     try {
       final members = await client.from('church_members').select('user_id, role, status').eq('church_id', church.id);
       for (final m in members) {
-        roles['${m['user_id']}'] = m['status'] == 'active' ? '${m['role']}' : 'disabled';
+        final memberRole = '${m['role']}';
+        roles['${m['user_id']}'] = m['status'] == 'active' ? (memberRole == 'viewer' ? 'editor' : memberRole) : 'disabled';
       }
     } catch (_) {}
     return [
@@ -212,6 +216,7 @@ class CloudService {
 
   /// Kutenganisha kifaa hiki. Data ya ndani inabaki; ili kuunganisha tena unahitaji QR/OTP mpya.
   static Future<void> disconnect() async {
+    await disposeSync();
     try {
       await client.auth.signOut();
     } catch (_) {}
@@ -221,6 +226,62 @@ class CloudService {
   // ---------------------------------------------------------------- sync
 
   static bool _syncing = false;
+  static Timer? _autoSyncTimer;
+  static Timer? _realtimeKick;
+  static dynamic _realtimeChannel;
+  static String? _realtimeChurchId;
+
+  static void startAutoSync() {
+    _autoSyncTimer ??= Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!available || user == null) return;
+      try {
+        final dirty = await AppDb.instance.getSetting('cloud_sync_dirty');
+        if (dirty != null && dirty.isNotEmpty) await sync();
+      } catch (_) {}
+    });
+  }
+
+  static Future<void> _ensureRealtime(String churchId) async {
+    if (_realtimeChurchId == churchId && _realtimeChannel != null) return;
+    try {
+      if (_realtimeChannel != null) {
+        await _realtimeChannel.unsubscribe();
+      }
+    } catch (_) {}
+    _realtimeChannel = null;
+    _realtimeChurchId = churchId;
+
+    final channel = client.channel('church-sync-$churchId');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'sync_records',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'church_id',
+        value: churchId,
+      ),
+      callback: (_) {
+        _realtimeKick?.cancel();
+        _realtimeKick = Timer(const Duration(milliseconds: 450), () async {
+          if (_syncing || user == null) return;
+          try { await sync(); } catch (_) {}
+        });
+      },
+    );
+    _realtimeChannel = channel;
+    await channel.subscribe();
+  }
+
+  static Future<void> disposeSync() async {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    _realtimeKick?.cancel();
+    _realtimeKick = null;
+    try { await _realtimeChannel?.unsubscribe(); } catch (_) {}
+    _realtimeChannel = null;
+    _realtimeChurchId = null;
+  }
 
   static Future<CloudSyncResult> sync() async {
     if (_syncing) return const CloudSyncResult(uploaded: 0, downloaded: 0, conflicts: 0);
@@ -230,8 +291,10 @@ class CloudService {
       final church = await refreshChurch();
       if (church == null) throw StateError('NO_CHURCH_ACCESS');
       final churchId = church.id;
+      await _ensureRealtime(churchId);
 
       final device = await SyncService.deviceId();
+      final dirtyAtStart = await AppDb.instance.getSetting('cloud_sync_dirty');
       try {
         await client.rpc('touch_device', params: {
           'p_church_id': churchId,
@@ -245,24 +308,22 @@ class CloudService {
       int uploaded = 0;
       int conflicts = 0;
 
-      // Kifaa cha "viewer" hakitumi data; kinapokea tu.
-      if (church.role != 'viewer') {
-        final rows = await AppDb.instance.syncRows(since: last == null ? null : DateTime.tryParse(last));
-        for (final row in rows) {
-          try {
-            final accepted = await client.rpc('upsert_sync_record', params: {
-              'p_church_id': churchId,
-              'p_entity_type': row['entity_type'] as String,
-              'p_sync_id': row['sync_id'] as String,
-              'p_payload': Map<String, dynamic>.from(row['payload'] as Map),
-              'p_updated_at': row['updated_at'] as String,
-              'p_deleted': row['deleted'] == true,
-              'p_device_id': device,
-            });
-            if (accepted == true) uploaded++;
-          } catch (_) {
-            conflicts++;
-          }
+      // Kila kifaa kilicholinkiwa ni peer kamili: kinatuma na kupokea data.
+      final rows = await AppDb.instance.syncRows(since: last == null ? null : DateTime.tryParse(last));
+      for (final row in rows) {
+        try {
+          final accepted = await client.rpc('upsert_sync_record', params: {
+            'p_church_id': churchId,
+            'p_entity_type': row['entity_type'] as String,
+            'p_sync_id': row['sync_id'] as String,
+            'p_payload': Map<String, dynamic>.from(row['payload'] as Map),
+            'p_updated_at': row['updated_at'] as String,
+            'p_deleted': row['deleted'] == true,
+            'p_device_id': device,
+          });
+          if (accepted == true) uploaded++;
+        } catch (_) {
+          conflicts++;
         }
       }
 
@@ -284,7 +345,16 @@ class CloudService {
         );
         if (applied) downloaded++;
       }
-      await AppDb.instance.setSetting(_kLastSync, DateTime.now().toUtc().toIso8601String());
+      final remoteMax = remote.isEmpty
+          ? null
+          : remote.map((r) => DateTime.tryParse('${r['updated_at']}'))
+              .whereType<DateTime>()
+              .fold<DateTime?>(null, (a, b) => a == null || b.isAfter(a) ? b : a);
+      final cursor = remoteMax ?? DateTime.now().toUtc();
+      await AppDb.instance.setSetting(_kLastSync, cursor.toUtc().toIso8601String());
+      if (dirtyAtStart == await AppDb.instance.getSetting('cloud_sync_dirty')) {
+        await AppDb.instance.setSetting('cloud_sync_dirty', '');
+      }
       await AppDb.instance.setSetting('cloud_last_sync_status', 'ok');
       await AppDb.instance.audit('CLOUD_SYNC', 'uploaded=$uploaded; downloaded=$downloaded; conflicts=$conflicts');
       return CloudSyncResult(uploaded: uploaded, downloaded: downloaded, conflicts: conflicts);
