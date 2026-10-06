@@ -42,10 +42,7 @@ class _ExpenditureSummaryPageState extends State<ExpenditureSummaryPage> {
 
   String _money(Object? value) {
     final n = value is num ? value : double.tryParse('$value') ?? 0;
-    return n.round().toString().replaceAllMapped(
-      RegExp(r'(?=(\d{3})+(?!\d))'),
-      (_) => ',',
-    );
+    return n.round().toString();
   }
 
   double _number(Object? value) {
