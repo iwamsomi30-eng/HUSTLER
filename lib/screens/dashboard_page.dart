@@ -87,7 +87,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context){
     return ListenableBuilder(listenable:L10n.instance,builder:(context,_){
-      return RefreshIndicator(onRefresh:_load,child:SingleChildScrollView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.fromLTRB(20,20,20,40),child:Center(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:1400),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      return RefreshIndicator(onRefresh:_load,child:SingleChildScrollView(physics:const AlwaysScrollableScrollPhysics(),padding:EdgeInsets.fromLTRB(pagePad(context),16,pagePad(context),40),child:Center(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:1400),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         _hero(),const SizedBox(height:16),_filters(),const SizedBox(height:16),
         if(_loading)const Padding(padding:EdgeInsets.all(70),child:Center(child:CircularProgressIndicator())) else if(_error!=null)_errorCard() else ...[
           _kpis(),const SizedBox(height:16),_insights(),const SizedBox(height:16),_trendCard(),const SizedBox(height:16),
