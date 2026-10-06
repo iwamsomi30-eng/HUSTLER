@@ -49,7 +49,7 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
   String _money(Object? value) {
     final n = safeNum(value);
     final s = n.round().toString();
-    return '${s.replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
+    return '$s TZS';
   }
 
   Future<void> _pick(bool start) async {
@@ -220,7 +220,7 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
 
   String _money(Object? value) {
     final n = safeNum(value);
-    return '${n.round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m) => ',')} TZS';
+    return '${n.round().toString()} TZS';
   }
 
   double _sumWhere(bool Function(Map<String, Object?>) test) =>
