@@ -199,13 +199,7 @@ class _Sidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     // Branded dark-blue gradient inspired by the supplied reference screens.
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [C.sidebarStart, C.sidebarEnd],
-        ),
-      ),
+      decoration: const BoxDecoration(color: C.sidebarStart),
       child: SafeArea(
         child: Column(
           children: [
@@ -288,13 +282,7 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final narrow = MediaQuery.of(context).size.width < 600;
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [C.topStart, C.topMid, C.topEnd],
-        ),
-      ),
+      decoration: const BoxDecoration(color: C.topMid),
       padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 16, vertical: narrow ? 8 : 12),
       child: SafeArea(
         bottom: false,
