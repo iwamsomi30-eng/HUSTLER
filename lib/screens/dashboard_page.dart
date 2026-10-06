@@ -26,7 +26,7 @@ class _DashboardPageState extends State<DashboardPage> {
   List<String> _fundNames = [];
 
   double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
-  String _money(Object? v) => 'TZS ${_num(v).round().toString().replaceAllMapped(RegExp(r'(?=(\d{3})+$)'), (m)=>',')}';
+  String _money(Object? v) => 'TZS ${_num(v).round().toString()}';
   String _date(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
 
   @override
