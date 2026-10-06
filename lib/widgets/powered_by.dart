@@ -10,8 +10,8 @@ class PoweredBy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = onDark
-        ? const [Color(0xFFFFD36B), Color(0xFF5EEAD4)]
-        : const [Color(0xFF0E9F8A), Color(0xFF1B6FD1), Color(0xFF6B3FA0)];
+        ? const [Color(0xFF8CC8FF), Color(0xFFBCA7FF)]
+        : const [Color(0xFF1478F6), Color(0xFF12B8D6), Color(0xFF7138F5)];
     return IgnorePointer(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
