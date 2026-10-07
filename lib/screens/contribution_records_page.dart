@@ -228,13 +228,26 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
   int _countWhere(bool Function(Map<String, Object?>) test) => _rows.where(test).length;
   double get _total => _sumWhere((_) => true);
 
+  Future<void> _exportExcel() async {
+    final m = ScaffoldMessenger.of(context);
+    try {
+      final r = await ContributionExportService.saveExcel(day: widget.day, rows: _rows);
+      m.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(r.cancelled ? tr('excel_cancelled') : '${tr('excel_saved')}: ${r.name}${r.displayPath != null ? '\n${r.displayPath}' : ''}'),
+      ));
+    } catch (_) {
+      m.showSnackBar(SnackBar(content: Text(tr('dash_export_failed'))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text(isPhone(context) ? _date(widget.day) : '${tr('nav_michango_records')} • ${_date(widget.day)}'),
       actions: [
         IconButton(onPressed: _loading ? null : () => ContributionExportService.sharePdf(day: widget.day, rows: _rows), tooltip: 'PDF', icon: const Icon(Icons.picture_as_pdf)),
-        IconButton(onPressed: _loading ? null : () => ContributionExportService.shareExcel(day: widget.day, rows: _rows), tooltip: 'Excel', icon: const Icon(Icons.table_view)),
+        IconButton(onPressed: _loading ? null : _exportExcel, tooltip: 'Excel', icon: const Icon(Icons.table_view)),
       ],
     ),
     body: _loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
