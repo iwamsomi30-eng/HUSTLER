@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
+import 'file_saver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -146,5 +147,13 @@ class OverallExportService {
   static Future<void> shareExcel({required DateTime? from, required DateTime? to, required Map<String, Object?> stats, required List<Map<String, Object?>> contributions, required List<Map<String, Object?>> categories, required List<Map<String, Object?>> funds, required List<Map<String, Object?>> daily}) async {
     final file = await buildExcel(from: from, to: to, stats: stats, contributions: contributions, categories: categories, funds: funds, daily: daily);
     await Share.shareXFiles([XFile(file.path)], text: 'Overall Dashboard - ${periodLabel(from, to)}');
+  }
+
+  /// Inahifadhi Excel moja kwa moja kwenye kifaa (Downloads).
+  static Future<SavedFile> saveExcel({required DateTime? from, required DateTime? to, required Map<String, Object?> stats, required List<Map<String, Object?>> contributions, required List<Map<String, Object?>> categories, required List<Map<String, Object?>> funds, required List<Map<String, Object?>> daily}) async {
+    final file = await buildExcel(from: from, to: to, stats: stats, contributions: contributions, categories: categories, funds: funds, daily: daily);
+    final bytes = await file.readAsBytes();
+    try { await file.delete(); } catch (_) {}
+    return FileSaver.saveBytes(p.basename(file.path), bytes);
   }
 }
