@@ -79,7 +79,8 @@ class _DashboardPageState extends State<DashboardPage> {
       if(pdf){
         await OverallExportService.sharePdf(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily);
       }else{
-        await OverallExportService.shareExcel(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily);
+        final r=await OverallExportService.saveExcel(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily);
+        if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(duration:const Duration(seconds:6),content:Text(r.cancelled?tr('excel_cancelled'):'${tr('excel_saved')}: ${r.name}${r.displayPath!=null?'\n${r.displayPath}':''}')));
       }
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(tr('dash_export_failed'))));}
   }
