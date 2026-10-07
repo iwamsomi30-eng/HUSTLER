@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'file_saver.dart';
 
 class ContributionExportService {
   /// Faragha: majina halisi ya watoaji HAYAWEKWI kwenye PDF/Excel.
@@ -157,5 +158,16 @@ class ContributionExportService {
   }) async {
     final file = await buildExcel(day: day, rows: rows);
     await Share.shareXFiles([XFile(file.path)], text: 'Michango Records - $day');
+  }
+
+  /// Inahifadhi Excel moja kwa moja kwenye kifaa (Downloads).
+  static Future<SavedFile> saveExcel({
+    required String day,
+    required List<Map<String, Object?>> rows,
+  }) async {
+    final file = await buildExcel(day: day, rows: rows);
+    final bytes = await file.readAsBytes();
+    try { await file.delete(); } catch (_) {}
+    return FileSaver.saveBytes(p.basename(file.path), bytes);
   }
 }
