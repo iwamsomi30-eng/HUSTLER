@@ -10,6 +10,28 @@ import 'db.dart';
 class Auth {
   static final _argon2 = Argon2id(memory: 32 * 1024, iterations: 2, parallelism: 2, hashLength: 32);
 
+  /// Idadi ya majaribio mabaya ya PIN yanayoruhusiwa kabla ya hali ya kurejesha (reset).
+  static const int maxAttempts = 5;
+
+  /// PIN ya muda ya kurejesha (reset) pale mtumiaji anaposahau PIN yake.
+  /// Inafanya kazi TU baada ya majaribio [maxAttempts] mabaya mfululizo.
+  static const String _tempPin = '1979';
+
+  static bool isTempPin(String pin) => pin == _tempPin;
+
+  /// Idadi ya majaribio mabaya (inahifadhiwa kwenye settings, hivyo kufunga app hakui-reset).
+  static Future<int> failedAttempts() async =>
+      int.tryParse(await AppDb.instance.getSetting('pin_fail_count') ?? '') ?? 0;
+
+  static Future<int> registerFailure() async {
+    final n = (await failedAttempts()) + 1;
+    await AppDb.instance.setSetting('pin_fail_count', '$n');
+    return n;
+  }
+
+  static Future<void> resetFailures() async =>
+      AppDb.instance.setSetting('pin_fail_count', '0');
+
   static Future<bool> hasPin() async => (await AppDb.instance.getSetting('pin_hash')) != null;
 
   static Future<void> setPin(String pin) async {
