@@ -1,14 +1,14 @@
-- Linked devices now work as equal peer devices: every linked device can view, add, edit and delete shared data.
-- Added near-real-time multi-device synchronization with Realtime updates plus automatic local-change upload.
-- Removed the old viewer write-block that caused the red “Imeshindikana kuhifadhi” error on linked devices.
-- Added conflict-safe synchronization so devices can work at the same time without one device locking another.
-- Jina la mfumo sasa ni TAG SHALOM KIBAMBA TEMPO HOSPITAL (app, skrini ya kuanza, PDF, Excel na installer).
-- Logo ya TAG imewekwa kwenye icon ya app (Android na Windows), skrini ya kuanza na vichwa vya PDF.
-- Maandishi ya fomu na ripoti za matumizi yamesanifishwa kuwa Kiswahili pekee (bila kuchanganya lugha).
+- Vifaa vilivyounganishwa sasa vinafanya kazi kama vifaa shirikishi sawa: kila kifaa kinaweza kuona, kuongeza, kuhariri na kufuta taarifa zinazoshirikiwa.
+- Imeongezwa usawazishaji wa karibu na wakati halisi kati ya vifaa, pamoja na kupakia mabadiliko ya ndani kiotomatiki.
+- Imeondolewa kizuizi cha zamani cha kuandika kilichosababisha ujumbe mwekundu “Imeshindikana kuhifadhi” kwenye vifaa vilivyounganishwa.
+- Imeongezwa ulinzi dhidi ya migongano ya taarifa ili vifaa vifanye kazi kwa wakati mmoja bila kimoja kuzuia kingine.
+- Jina la mfumo sasa ni TAG SHALOM KIBAMBA TEMPO HOSPITAL (programu, skrini ya kuanza, PDF, Excel na kisakinishi).
+- Nembo ya TAG imewekwa kwenye alama ya programu (Android na Windows), skrini ya kuanza na vichwa vya PDF.
 - Maingizo ya Michango: "Jina la Mchango" sasa ni orodha ya kuchagua (FUNGU, INJILI, UJENZI, WAJANE, MAANDIKO, SHUKRANI, UMISHENI, SADAKA) yenye chaguo la kuongeza jina jipya.
 - Maingizo ya Matumizi: "Jina la Matumizi" ni orodha ya kuchagua (UJENZI, MALIPO YA WAHUDUMU, MALIPO YA MATENGENEZO, MALIPO YA MANUNUZI) yenye chaguo la kuongeza jina jipya.
-- Imeongezwa sehemu ya Jinsia (KE/ME) kwenye kila mstari wa mchango; inaonekana kwenye rekodi na exports.
-- Muhtasari wa Matumizi, Salio na Dashibodi sasa vinaonyesha pia majina mapya yaliyoongezwa.
-- Ukurasa mpya "Marekebisho ya Ujumbe": admin anaweka namba ya risiti ya ujumbe wa awali na kutuma ujumbe wa kurekebisha taarifa zilizotumwa kimakosa kwa mchangiaji; historia ya jumbe inahifadhiwa.
+- Imeongezwa sehemu ya Jinsia (KE/ME) kwenye kila mstari wa mchango; inaonekana kwenye rekodi na kwenye taarifa zinazopakuliwa.
+- Muhtasari wa Matumizi, Salio na Muhtasari Mkuu sasa vinaonyesha pia majina mapya yaliyoongezwa.
+- Ukurasa mpya "Marekebisho ya Ujumbe": msimamizi anaweka namba ya risiti ya ujumbe wa awali na kutuma ujumbe wa kurekebisha taarifa zilizotumwa kimakosa kwa mtoaji wa mchango; historia ya jumbe inahifadhiwa.
 - Namba ya risiti ina muundo mpya: TAG-STK-MWAKA-MMSS-SAA-JINA-NAMBA-KIPEKEE (mfano TAG-STK-2026-1011-1423-FU-125-7K3QX9). Risiti za zamani zinaendelea kufanya kazi bila kubadilishwa.
 - Dirisha la kuhariri matumizi sasa lina orodha ya majina ya matumizi yenye chaguo la "Ongeza jina jipya", kama ukurasa wa kuingiza matumizi.
+- Lugha sanifu: kurasa zote, majina ya menyu, maelekezo, ujumbe wa hitilafu, PDF na Excel sasa vinatumia lugha moja iliyochaguliwa (Kiswahili sanifu au Kiingereza sanifu) bila kuchanganya lugha. Maneno ya kigeni yamebadilishwa na maneno ya Kiswahili, mfano "Dashboard" sasa ni "Muhtasari Mkuu", "Michango Records" ni "Rekodi za Michango", na "Export" ni "Pakua".
