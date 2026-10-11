@@ -231,7 +231,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
             donorName: m['donorName'] as String,
             contact: (m['contact'] as String?) ?? '',
             amount: m['amount'] as double,
-            purpose: '$title (${_fundName.text.trim()})',
+            purpose: title, // jina la mchango mara moja tu, bila mabano
             date: _date,
             receiptNo: m['receiptNo'] as String,
           ),
