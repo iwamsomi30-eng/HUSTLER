@@ -1,0 +1,929 @@
+
+import 'package:flutter/material.dart';
+import '../core/catalog.dart';
+import '../core/db.dart';
+import '../core/i18n.dart';
+import '../core/theme.dart';
+import '../services/sms_service.dart';
+import '../widgets/name_picker.dart';
+
+enum ContributionKind { fungu, other }
+
+class ContributionRow {
+  String donorName = '';
+  String envelopeNo = '';
+  String contact = '';
+  String amount = '';
+  String nameNo = '';
+  String sex = ''; // 'KE' au 'ME'
+
+  ContributionRow();
+
+  Map<String, Object?> toMap() => {
+        'donorName': donorName.trim(),
+        'envelopeNo': envelopeNo.trim(),
+        'contact': contact.trim(),
+        'amount': amount.trim(),
+        'nameNo': nameNo.trim(),
+        'sex': sex,
+      };
+}
+
+class ContributionInputPage extends StatefulWidget {
+  const ContributionInputPage({super.key});
+
+  @override
+  State<ContributionInputPage> createState() => _ContributionInputPageState();
+}
+
+class _ContributionInputPageState extends State<ContributionInputPage> {
+  DateTime _date = DateTime.now();
+  final _dateLabel = TextEditingController();
+  final _fundName = TextEditingController();
+  String? _contributionName = NameCatalog.fungu;
+  List<String> _names = NameCatalog.contributionDefaults;
+  ContributionKind get _kind => _contributionName == NameCatalog.fungu ? ContributionKind.fungu : ContributionKind.other;
+  bool _sendSms = true;
+
+  final List<ContributionRow> _funguI = [ContributionRow()];
+  final List<ContributionRow> _funguII = [ContributionRow()];
+  final List<ContributionRow> _otherI = [ContributionRow()];
+  final List<ContributionRow> _otherII = [ContributionRow()];
+
+  @override
+  void initState() {
+    super.initState();
+    _syncDateLabel();
+    _loadNames();
+    AppDb.instance.getSetting('sms_receipts').then((v) {
+      if (mounted && v != null) setState(() => _sendSms = v != '0');
+    });
+  }
+
+  @override
+  void dispose() {
+    _dateLabel.dispose();
+    _fundName.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadNames() async {
+    final names = await NameCatalog.contributions();
+    if (mounted) setState(() => _names = names);
+  }
+
+  Future<void> _addName(String name) async {
+    final v = await NameCatalog.add(NameKind.contribution, name);
+    await _loadNames();
+    if (mounted) setState(() => _contributionName = v);
+  }
+
+  bool _sexMissing(List<ContributionRow> rows) => rows.any((r) => r.sex != 'KE' && r.sex != 'ME');
+
+  void _syncDateLabel() {
+    _dateLabel.text =
+        '${_date.day.toString().padLeft(2, '0')}/${_date.month.toString().padLeft(2, '0')}/${_date.year}';
+  }
+
+  String _money(double value) {
+    return value.round().toString();
+  }
+
+  double _sum(List<ContributionRow> rows) {
+    return rows.fold<double>(
+      0,
+      (total, row) => total + (double.tryParse(row.amount.replaceAll(',', '')) ?? 0),
+    );
+  }
+
+  String _receipt() {
+    final now = DateTime.now();
+    return 'RC-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}${(now.microsecond ~/ 100).toString().padLeft(4, '0')}';
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      helpText: tr('select_service_date'),
+    );
+    if (picked != null) {
+      setState(() {
+        _date = picked;
+        _syncDateLabel();
+      });
+    }
+  }
+
+  Future<void> _saveFungu(int service, List<ContributionRow> rows) async {
+    if (_fundName.text.trim().isEmpty) { _snack(tr('fund_required'), error: true); return; }
+    final valid = rows.where((r) => r.envelopeNo.trim().isNotEmpty || r.amount.trim().isNotEmpty).toList();
+    if (valid.isEmpty) {
+      _snack(tr('add_at_least_one'), error: true);
+      return;
+    }
+    for (final row in valid) {
+      final amount = double.tryParse(row.amount.replaceAll(',', '').trim());
+      if (row.envelopeNo.trim().isEmpty || row.donorName.trim().isEmpty || amount == null || amount <= 0) {
+        _snack(tr('fungu_row_invalid'), error: true);
+        return;
+      }
+    }
+    if (_sexMissing(valid)) { _snack(tr('sex_required'), error: true); return; }
+
+    try {
+      final List<Map<String, Object?>> prepared = [
+        for (final row in valid)
+          {
+            'envelopeNo': row.envelopeNo.trim(),
+            'donorName': row.donorName.trim(),
+            'sex': row.sex,
+            'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
+            'amount': double.parse(row.amount.replaceAll(',', '')),
+            'receiptNo': _receipt(),
+          },
+      ];
+      final batchId = await AppDb.instance.saveFunguBatch(
+        date: _date.toIso8601String(),
+        service: service,
+        title: 'Fungu',
+        fundName: _fundName.text,
+        rows: prepared,
+      );
+      await AppDb.instance.audit(
+        'CONTRIBUTION_FUNGU_SAVED',
+        'batch=$batchId; service=$service; rows=${valid.length}; total=${_sum(valid)}',
+      );
+      final smsItems = [
+        for (final m in prepared)
+          SmsItem(
+            donorName: m['donorName'] as String,
+            contact: (m['contact'] as String?) ?? '',
+            amount: m['amount'] as double,
+            purpose: _fundName.text.trim(),
+            date: _date,
+            receiptNo: m['receiptNo'] as String,
+          ),
+      ];
+      final total = _sum(valid);
+
+      setState(() {
+        rows
+          ..clear()
+          ..add(ContributionRow());
+      });
+      _snack('${tr('saved_successfully')}  ${_money(total)} TZS');
+      final smsNote = await _notifyDonors(smsItems, 'fungu batch=$batchId');
+      if (smsNote.isNotEmpty && mounted) _snack('${tr('saved_successfully')}  ${_money(total)} TZS$smsNote');
+    } catch (_) {
+      _snack(tr('save_failed'), error: true);
+    }
+  }
+
+  Future<void> _saveOther(int service, List<ContributionRow> rows) async {
+    final title = (_contributionName ?? '').trim();
+    if (_fundName.text.trim().isEmpty) { _snack(tr('fund_required'), error: true); return; }
+    if (title.isEmpty) {
+      _snack(tr('other_name_required'), error: true);
+      return;
+    }
+    final valid = rows.where((r) => r.donorName.trim().isNotEmpty || r.amount.trim().isNotEmpty).toList();
+    if (valid.isEmpty) {
+      _snack(tr('add_at_least_one'), error: true);
+      return;
+    }
+    for (final row in valid) {
+      final amount = double.tryParse(row.amount.replaceAll(',', '').trim());
+      if (row.donorName.trim().isEmpty || amount == null || amount <= 0) {
+        _snack(tr('other_row_invalid'), error: true);
+        return;
+      }
+    }
+    if (_sexMissing(valid)) { _snack(tr('sex_required'), error: true); return; }
+
+    try {
+      final List<Map<String, Object?>> prepared = [
+        for (final row in valid)
+          {
+            'contributionName': title,
+            'donorName': row.donorName.trim(),
+            'sex': row.sex,
+            'contact': row.contact.trim().isEmpty ? null : row.contact.trim(),
+            'amount': double.parse(row.amount.replaceAll(',', '')),
+            'receiptNo': _receipt(),
+          },
+      ];
+      final batchId = await AppDb.instance.saveOtherBatch(
+        date: _date.toIso8601String(),
+        service: service,
+        title: title,
+        fundName: _fundName.text,
+        rows: prepared,
+      );
+      await AppDb.instance.audit(
+        'CONTRIBUTION_OTHER_SAVED',
+        'batch=$batchId; service=$service; title=$title; rows=${valid.length}; total=${_sum(valid)}',
+      );
+      final smsItems = [
+        for (final m in prepared)
+          SmsItem(
+            donorName: m['donorName'] as String,
+            contact: (m['contact'] as String?) ?? '',
+            amount: m['amount'] as double,
+            purpose: '$title (${_fundName.text.trim()})',
+            date: _date,
+            receiptNo: m['receiptNo'] as String,
+          ),
+      ];
+      final total = _sum(valid);
+
+      setState(() {
+        rows
+          ..clear()
+          ..add(ContributionRow());
+      });
+      _snack('${tr('saved_successfully')}  ${_money(total)} TZS');
+      final smsNote = await _notifyDonors(smsItems, 'other batch=$batchId');
+      if (smsNote.isNotEmpty && mounted) _snack('${tr('saved_successfully')}  ${_money(total)} TZS$smsNote');
+    } catch (_) {
+      _snack(tr('save_failed'), error: true);
+    }
+  }
+
+  /// Inatuma SMS ya "malipo yamepokelewa" baada ya data kuhifadhiwa. Inarudisha ujumbe wa muhtasari.
+  Future<String> _notifyDonors(List<SmsItem> items, String batchLabel) async {
+    if (!_sendSms) return '';
+    final r = await SmsService.sendReceipts(items);
+    if (r.nothing) return '';
+    if (r.unsupported) return '\n${tr('sms_unsupported')}';
+    if (r.permissionDenied) return '\n${tr('sms_permission_denied')}';
+    try {
+      await AppDb.instance.audit('SMS_RECEIPTS', '$batchLabel; sent=${r.sent}; failed=${r.failed}; invalid=${r.invalid}');
+    } catch (_) {}
+    final b = StringBuffer();
+    if (r.sent > 0) b.write('\n${tr('sms_sent')}: ${r.sent}');
+    if (r.failed > 0) b.write('\n${tr('sms_failed')}: ${r.failed}');
+    if (r.invalid > 0) b.write('\n${tr('sms_invalid')}: ${r.invalid}');
+    return b.toString();
+  }
+
+  void _snack(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(error ? Icons.error_outline : Icons.check_circle_outline,
+                  color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: error ? Colors.red.shade700 : C.teal,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: L10n.instance,
+      builder: (context, _) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1220),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _pageIntro(),
+                  const SizedBox(height: 16),
+                  _dateAndMode(),
+                  const SizedBox(height: 16),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: _kind == ContributionKind.fungu
+                        ? _funguSection()
+                        : _otherSection(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _pageIntro() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      decoration: BoxDecoration(
+        color: C.navy,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: C.navy.withOpacity(.12),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: C.teal.withOpacity(.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.volunteer_activism, color: Colors.white, size: 25),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('contribution_input_title'),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(tr('contribution_input_subtitle'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+              ],
+            ),
+          ),
+          if (MediaQuery.sizeOf(context).width >= 650)
+            _pill(Icons.lock_outline, tr('offline_secure')),
+        ],
+      ),
+    );
+  }
+
+  Widget _pill(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: C.gold),
+          const SizedBox(width: 6),
+          Text(text, style: const TextStyle(color: Colors.white, fontSize: 11.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateAndMode() {
+    return _card(
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final narrow = c.maxWidth < 720;
+          final fund = TextField(
+            controller: _fundName,
+            decoration: _input(tr('fund_name'), Icons.account_balance_wallet_outlined),
+            textInputAction: TextInputAction.next,
+          );
+          final date = TextField(
+            controller: _dateLabel,
+            readOnly: true,
+            onTap: _pickDate,
+            decoration: _input(tr('service_date'), Icons.calendar_month_outlined)
+                .copyWith(suffixIcon: IconButton(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 19),
+                )),
+          );
+          final kind = NamePicker(
+            label: tr('contribution_name'),
+            icon: Icons.label_outline,
+            items: _names,
+            value: _contributionName,
+            onChanged: (v) => setState(() => _contributionName = v),
+            onAdd: _addName,
+          );
+          final sms = SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            secondary: const Icon(Icons.sms_outlined, color: C.teal),
+            title: Text(tr('sms_toggle'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: C.navy)),
+            subtitle: Text(SmsService.supported ? tr('sms_toggle_sub') : tr('sms_unsupported'), style: const TextStyle(fontSize: 11.5, color: C.muted)),
+            value: _sendSms && SmsService.supported,
+            onChanged: SmsService.supported
+                ? (v) {
+                    setState(() => _sendSms = v);
+                    AppDb.instance.setSetting('sms_receipts', v ? '1' : '0');
+                  }
+                : null,
+          );
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                fund,
+                const SizedBox(height: 12),
+                date,
+                const SizedBox(height: 12),
+                kind,
+                const SizedBox(height: 6),
+                sms,
+              ],
+            );
+          }
+          return Column(children: [Row(children: [Expanded(child: fund), const SizedBox(width: 14), Expanded(child: date)]), const SizedBox(height: 14), SizedBox(width: double.infinity, child: kind), const SizedBox(height: 6), sms]);
+        },
+      ),
+    );
+  }
+
+  Widget _funguSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader(
+          icon: Icons.markunread_mailbox_outlined,
+          title: tr('fungu'),
+          subtitle: tr('fungu_description'),
+        ),
+        const SizedBox(height: 12),
+        _serviceTable(
+          service: 1,
+          title: tr('ibada_one'),
+          rows: _funguI,
+          onAdd: () => setState(() => _funguI.add(ContributionRow())),
+          onSave: () => _saveFungu(1, _funguI),
+          fungu: true,
+        ),
+        const SizedBox(height: 14),
+        _serviceTable(
+          service: 2,
+          title: tr('ibada_two'),
+          rows: _funguII,
+          onAdd: () => setState(() => _funguII.add(ContributionRow())),
+          onSave: () => _saveFungu(2, _funguII),
+          fungu: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _otherSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader(
+          icon: Icons.groups_2_outlined,
+          title: _contributionName ?? tr('other_contributions'),
+          subtitle: tr('other_contributions_description'),
+        ),
+        const SizedBox(height: 12),
+        const SizedBox(height: 12),
+        _serviceTable(
+          service: 1,
+          title: tr('ibada_one'),
+          rows: _otherI,
+          onAdd: () => setState(() => _otherI.add(ContributionRow())),
+          onSave: () => _saveOther(1, _otherI),
+        ),
+        const SizedBox(height: 14),
+        _serviceTable(
+          service: 2,
+          title: tr('ibada_two'),
+          rows: _otherII,
+          onAdd: () => setState(() => _otherII.add(ContributionRow())),
+          onSave: () => _saveOther(2, _otherII),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: C.teal.withOpacity(.1),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: C.teal, size: 22),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      color: C.navy, fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: C.muted, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _serviceTable({
+    required int service,
+    required String title,
+    required List<ContributionRow> rows,
+    required VoidCallback onAdd,
+    required VoidCallback onSave,
+    bool fungu = false,
+  }) {
+    final total = _sum(rows);
+    return _card(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 15, 14, 15),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF7FAFE),
+              border: Border(bottom: BorderSide(color: C.border)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: service == 1 ? C.blue.withOpacity(.1) : C.purple.withOpacity(.1),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text('$service',
+                      style: TextStyle(
+                          color: service == 1 ? C.blue : C.purple,
+                          fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(
+                          color: C.navy, fontWeight: FontWeight.w800, fontSize: 15)),
+                ),
+                Text('${rows.length} ${tr('rows')}',
+                    style: const TextStyle(color: C.muted, fontSize: 11.5)),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, c) {
+              final wide = c.maxWidth >= 850;
+              if (wide) {
+                return _wideGrid(rows, fungu);
+              }
+              return _mobileRows(rows, fungu);
+            },
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFBFCFE),
+              border: Border(top: BorderSide(color: C.border)),
+            ),
+            child: LayoutBuilder(builder: (context, box) {
+              final totalText = Text('${tr('total')}: ${_money(total)} TZS',
+                  style: const TextStyle(
+                      color: C.navy, fontWeight: FontWeight.w800, fontSize: 14));
+              final addBtn = OutlinedButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(tr('add_row')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: C.navy,
+                  side: const BorderSide(color: C.border),
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                ),
+              );
+              final saveBtn = ElevatedButton.icon(
+                onPressed: onSave,
+                icon: const Icon(Icons.save_outlined, size: 18),
+                label: Text(tr('save')),
+              );
+              if (box.maxWidth < 480) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    totalText,
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: addBtn),
+                      const SizedBox(width: 8),
+                      Expanded(child: saveBtn),
+                    ]),
+                  ],
+                );
+              }
+              return Row(children: [
+                Expanded(child: totalText),
+                addBtn,
+                const SizedBox(width: 8),
+                saveBtn,
+              ]);
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _wideGrid(List<ContributionRow> rows, bool fungu) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+            decoration: BoxDecoration(
+              color: C.navy.withOpacity(.045),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                _head('#', 42),
+                if (fungu) _head(tr('envelope_no'), 135),
+                const SizedBox(width: 6),
+                Expanded(flex: fungu ? 3 : 4, child: _headText(tr('donor_name'))),
+                const SizedBox(width: 6),
+                _head(tr('sex'), 110),
+                const SizedBox(width: 6),
+                _head(tr('amount'), 150),
+                const SizedBox(width: 6),
+                _head(tr('contact'), 170),
+                const SizedBox(width: 48),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...rows.asMap().entries.map((e) => _rowEditor(e.key, e.value, fungu, rows)),
+        ],
+      ),
+    );
+  }
+
+  Widget _rowEditor(
+      int index, ContributionRow row, bool fungu, List<ContributionRow> rows) {
+    return Padding(
+      key: ObjectKey(row),
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 42,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Text('${index + 1}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: C.muted, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          if (fungu)
+            SizedBox(
+              width: 135,
+              child: _compactField(
+                initial: row.envelopeNo,
+                hint: '001',
+                onChanged: (v) => setState(() => row.envelopeNo = v),
+              ),
+            ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: fungu ? 3 : 4,
+            child: _compactField(
+              initial: row.donorName,
+              hint: tr('name'),
+              onChanged: (v) => setState(() => row.donorName = v),
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(width: 110, child: _sexField(row)),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 150,
+            child: _compactField(
+              initial: row.amount,
+              hint: '0',
+              number: true,
+              onChanged: (v) => setState(() => row.amount = v),
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 170,
+            child: _compactField(
+              initial: row.contact,
+              hint: '07xx xxx xxx',
+              number: true,
+              onChanged: (v) => setState(() => row.contact = v),
+            ),
+          ),
+          IconButton(
+            tooltip: tr('remove_row'),
+            onPressed: rows.length == 1
+                ? null
+                : () => setState(() => rows.removeAt(index)),
+            icon: const Icon(Icons.delete_outline, color: C.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileRows(List<ContributionRow> rows, bool fungu) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: rows.asMap().entries.map((e) {
+          final row = e.value;
+          return Container(
+            key: ObjectKey(row),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFAFCFF),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: C.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(
+                    child: Text('${tr('row')} ${e.key + 1}',
+                        style: const TextStyle(color: C.navy, fontWeight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    tooltip: tr('remove_row'),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: rows.length == 1
+                        ? null
+                        : () => setState(() => rows.removeAt(e.key)),
+                    icon: const Icon(Icons.delete_outline, color: C.muted),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                if (fungu) ...[
+                  _field(
+                    label: tr('envelope_no'),
+                    initial: row.envelopeNo,
+                    onChanged: (v) => setState(() => row.envelopeNo = v),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                _field(
+                  label: tr('donor_name'),
+                  initial: row.donorName,
+                  onChanged: (v) => setState(() => row.donorName = v),
+                ),
+                const SizedBox(height: 8),
+                _sexField(row, compact: false),
+                const SizedBox(height: 8),
+                _field(
+                  label: tr('amount'),
+                  initial: row.amount,
+                  number: true,
+                  onChanged: (v) => setState(() => row.amount = v),
+                ),
+                const SizedBox(height: 8),
+                _field(
+                  label: tr('contact'),
+                  initial: row.contact,
+                  number: true,
+                  onChanged: (v) => setState(() => row.contact = v),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _headText(String text) => Text(text,
+      style: const TextStyle(color: C.muted, fontSize: 11, fontWeight: FontWeight.w800));
+
+  Widget _sexField(ContributionRow row, {bool compact = true}) {
+    return DropdownButtonFormField<String>(
+      key: ValueKey('sex-${identityHashCode(row)}-${row.sex}'),
+      value: row.sex.isEmpty ? null : row.sex,
+      isExpanded: true,
+      hint: Text(tr('sex'), style: const TextStyle(color: C.muted, fontSize: 12)),
+      decoration: compact
+          ? InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: C.border)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: C.border)),
+            )
+          : InputDecoration(labelText: tr('sex')),
+      items: [
+        DropdownMenuItem(value: 'KE', child: Text(compact ? 'KE' : tr('sex_female'), style: const TextStyle(fontSize: 13))),
+        DropdownMenuItem(value: 'ME', child: Text(compact ? 'ME' : tr('sex_male'), style: const TextStyle(fontSize: 13))),
+      ],
+      onChanged: (v) => setState(() => row.sex = v ?? ''),
+    );
+  }
+
+  Widget _head(String text, double width) => SizedBox(
+        width: width,
+        child: Text(text,
+            style: const TextStyle(
+                color: C.muted, fontSize: 11, fontWeight: FontWeight.w800)),
+      );
+
+  Widget _field({
+    required String label,
+    String? initial,
+    bool number = false,
+    required ValueChanged<String> onChanged,
+  }) {
+    return TextFormField(
+      initialValue: initial ?? '',
+      keyboardType: number ? TextInputType.phone : TextInputType.text,
+      onChanged: onChanged,
+      decoration: _input(label, null),
+    );
+  }
+
+  Widget _compactField({
+    String? initial,
+    required String hint,
+    bool number = false,
+    required ValueChanged<String> onChanged,
+  }) {
+    return TextFormField(
+      initialValue: initial ?? '',
+      keyboardType: number ? TextInputType.phone : TextInputType.text,
+      onChanged: onChanged,
+      style: const TextStyle(fontSize: 13, color: C.text),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: C.muted, fontSize: 12),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: C.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: C.border),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _input(String label, IconData? icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: icon == null ? null : Icon(icon, size: 19),
+    );
+  }
+
+  Widget _card({required Widget child, EdgeInsetsGeometry? padding}) {
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: C.border),
+        boxShadow: [
+          BoxShadow(
+            color: C.navy.withOpacity(.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
