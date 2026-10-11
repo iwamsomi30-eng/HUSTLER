@@ -54,6 +54,7 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   void initState() {
     super.initState();
     _syncDateLabel();
+    _fundName.text = _contributionName ?? ''; // jina chaguo-msingi (FUNGU) lijijaze
     _loadNames();
     AppDb.instance.getSetting('sms_receipts').then((v) {
       if (mounted && v != null) setState(() => _sendSms = v != '0');
@@ -75,7 +76,12 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
   Future<void> _addName(String name) async {
     final v = await NameCatalog.add(NameKind.contribution, name);
     await _loadNames();
-    if (mounted) setState(() => _contributionName = v);
+    if (mounted) {
+      setState(() {
+        _contributionName = v;
+        _fundName.text = v; // jina la mfuko lijijaze
+      });
+    }
   }
 
   bool _sexMissing(List<ContributionRow> rows) => rows.any((r) => r.sex != 'KE' && r.sex != 'ME');
@@ -406,7 +412,10 @@ class _ContributionInputPageState extends State<ContributionInputPage> {
             icon: Icons.label_outline,
             items: _names,
             value: _contributionName,
-            onChanged: (v) => setState(() => _contributionName = v),
+            onChanged: (v) => setState(() {
+              _contributionName = v;
+              _fundName.text = v; // jina la mfuko lijijaze
+            }),
             onAdd: _addName,
           );
           final sms = SwitchListTile(
