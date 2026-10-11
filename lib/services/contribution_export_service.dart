@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import '../core/brand.dart';
 import 'file_saver.dart';
 
 class ContributionExportService {
@@ -41,25 +42,13 @@ class ContributionExportService {
     required String title,
   }) async {
     final doc = pw.Document();
+    final logo = await Brand.pdfLogo();
     final total = rows.fold<double>(0, (s, r) => s + amountOf(r));
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(24),
-        header: (_) => pw.Container(
-          padding: const pw.EdgeInsets.only(bottom: 10),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Text('MFUKO WA MAPATO YA KANISA', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 3),
-                pw.Text(title, style: const pw.TextStyle(fontSize: 10)),
-              ]),
-              pw.Text('Tarehe: $day', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-            ],
-          ),
-        ),
+        header: (_) => Brand.pdfHeader(logo: logo, title: title, trailing: 'Tarehe: $day'),
         footer: (ctx) => pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Text('Ukurasa ${ctx.pageNumber} / ${ctx.pagesCount}', style: const pw.TextStyle(fontSize: 8)),
@@ -68,9 +57,9 @@ class ContributionExportService {
           pw.SizedBox(height: 10),
           pw.TableHelper.fromTextArray(
             headers: [
-              'Aina', 'Ibada', 'Namba (Bahasha / MCH)', 'Jina la Mchango',
-              if (includeContact) 'Contact',
-              'Kiasi (TZS)', 'Receipt',
+              'Aina', 'Ibada', 'Namba ya Bahasha / Jina', 'Jina la Mchango',
+              if (includeContact) 'Mawasiliano',
+              'Kiasi (TZS)', 'Risiti',
             ],
             data: rows.map((r) => [
               r['type'] == 'FUNGU' ? 'FUNGU' : 'MCHANGO MENGINE',
@@ -105,7 +94,7 @@ class ContributionExportService {
     required String day,
     required List<Map<String, Object?>> rows,
   }) async {
-    final bytes = await pdfBytes(day: day, rows: rows, title: 'Michango Records');
+    final bytes = await pdfBytes(day: day, rows: rows, title: 'Rekodi za Michango');
     await Printing.sharePdf(bytes: bytes, filename: 'michango_${safeDate(day)}.pdf');
   }
 
@@ -115,7 +104,7 @@ class ContributionExportService {
   }) async {
     final excel = Excel.createExcel();
     final sheet = excel['Michango'];
-    final headers = ['Tarehe', 'Aina', 'Ibada', 'Namba (Bahasha / MCH)', 'Jina la Mchango', if (includeContact) 'Contact', 'Kiasi (TZS)', 'Receipt No.'];
+    final headers = ['Tarehe', 'Aina', 'Ibada', 'Namba ya Bahasha / Jina', 'Jina la Mchango', if (includeContact) 'Mawasiliano', 'Kiasi (TZS)', 'Namba ya Risiti'];
     for (var i = 0; i < headers.length; i++) {
       final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
       cell.value = TextCellValue(headers[i]);
@@ -157,7 +146,7 @@ class ContributionExportService {
     required List<Map<String, Object?>> rows,
   }) async {
     final file = await buildExcel(day: day, rows: rows);
-    await Share.shareXFiles([XFile(file.path)], text: 'Michango Records - $day');
+    await Share.shareXFiles([XFile(file.path)], text: 'Rekodi za Michango - $day');
   }
 
   /// Inahifadhi Excel moja kwa moja kwenye kifaa (Downloads).
