@@ -22,8 +22,8 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _s = {
     'sw': {
-      'app_name': 'MFUKO WA MAPATO YA KANISA',
-      'app_name_short': 'MFUKO WA\nMAPATO YA KANISA',
+      'app_name': 'TAG SHALOM KIBAMBA TEMPO HOSPITAL',
+      'app_name_short': 'TAG SHALOM\nKIBAMBA TEMPO\nHOSPITAL',
       'tagline': 'Usimamizi wa Michango na Matumizi ya Kanisa',
       'motto': 'Pamoja katika imani, tunajenga kazi ya Mungu',
       'nav_dashboard': 'Dashboard',
@@ -283,8 +283,8 @@ class L10n extends ChangeNotifier {
       'upd_title': 'Toleo jipya', 'upd_body': 'Kuna toleo jipya la app. Washa internet (weka bundle) kisha bonyeza "Sasisha sasa" ili kupata maboresho mapya.', 'upd_whats_new': 'Kipya kwenye toleo hili:', 'upd_later': 'Baadaye', 'upd_now': 'Sasisha sasa', 'upd_downloading': 'Inapakua...', 'upd_optional': 'Ukichagua Baadaye, unaweza kuendelea kutumia app kama kawaida.', 'upd_need_perm': 'Ruhusu app hii kusakinisha masasisho kwenye ukurasa utakaofunguka, kisha rudi na ubonyeze "Sasisha sasa" tena.', 'upd_failed': 'Imeshindikana kupakua. Hakikisha una internet kisha jaribu tena.', 'upd_check': 'Angalia masasisho', 'upd_checking': 'Inaangalia...', 'upd_uptodate': 'Una toleo jipya zaidi tayari.', 'upd_offline': 'Imeshindikana kuangalia. Hakikisha una internet.', 'upd_tooltip': 'Toleo jipya linapatikana',
     },
     'en': {
-      'app_name': 'CHURCH INCOME FUND',
-      'app_name_short': 'CHURCH\nINCOME FUND',
+      'app_name': 'TAG SHALOM KIBAMBA TEMPO HOSPITAL',
+      'app_name_short': 'TAG SHALOM\nKIBAMBA TEMPO\nHOSPITAL',
       'tagline': 'Church Contributions and Expenditure Management',
       'motto': 'Together in faith, we build God\'s work',
       'nav_dashboard': 'Dashboard',
