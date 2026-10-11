@@ -9,3 +9,5 @@
 - Maingizo ya Matumizi: "Jina la Matumizi" ni orodha ya kuchagua (UJENZI, MALIPO YA WAHUDUMU, MALIPO YA MATENGENEZO, MALIPO YA MANUNUZI) yenye chaguo la kuongeza jina jipya.
 - Imeongezwa sehemu ya Jinsia (KE/ME) kwenye kila mstari wa mchango; inaonekana kwenye rekodi na exports.
 - Muhtasari wa Matumizi, Salio na Dashibodi sasa vinaonyesha pia majina mapya yaliyoongezwa.
+- Ukurasa mpya "Marekebisho ya Ujumbe": admin anaweka namba ya risiti ya ujumbe wa awali na kutuma ujumbe wa kurekebisha taarifa zilizotumwa kimakosa kwa mchangiaji; historia ya jumbe inahifadhiwa.
+- Namba ya risiti ina muundo mpya: TAG-STK-MWAKA-MMSS-SAA-JINA-NAMBA-KIPEKEE (mfano TAG-STK-2026-1011-1423-FU-125-7K3QX9). Risiti za zamani zinaendelea kufanya kazi bila kubadilishwa.
