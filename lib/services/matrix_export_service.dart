@@ -163,6 +163,28 @@ class MatrixExportService {
 
   static List<DonorEntry> _sorted(DonorRecord d) => [...d.entries]..sort((a, b) => a.date.compareTo(b.date));
 
+  /// Kisanduku cha taarifa za mtoaji husika: jina, namba, jinsia na tarehe ya usajili.
+  static pw.Widget _donorInfoBox(DonorRecord d) {
+    pw.Widget row(String label, String value) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
+          child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.SizedBox(width: 130, child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Expanded(child: pw.Text(value.isEmpty ? '—' : value, style: const pw.TextStyle(fontSize: 10))),
+          ]),
+        );
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey500, width: 0.8)),
+      child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        row(tr('col_name'), d.name),
+        row(tr('env_or_donor_no'), d.idNo),
+        row(tr('sex'), d.sex),
+        row(tr('col_reg_date'), _d(d.firstDate)),
+      ]),
+    );
+  }
+
   static Future<Uint8List> donorPdfBytes(DonorRecord d) async {
     final doc = pw.Document();
     final logo = await Brand.pdfLogo();
@@ -174,8 +196,8 @@ class MatrixExportService {
       footer: _footer,
       build: (_) => [
         pw.SizedBox(height: 8),
-        pw.Text('${tr('col_reg_date')}: ${_d(d.firstDate)}   •   ${tr('sex')}: ${d.sex.isEmpty ? '—' : d.sex}', style: const pw.TextStyle(fontSize: 10)),
-        pw.SizedBox(height: 10),
+        _donorInfoBox(d),
+        pw.SizedBox(height: 12),
         pw.Text(tr('donor_by_name'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
         pw.SizedBox(height: 4),
         pw.TableHelper.fromTextArray(
@@ -220,7 +242,7 @@ class MatrixExportService {
 
     put(0, 0, Brand.systemName, bold: true);
     put(0, 1, '${tr('donor_profile')} • ${tr('env_or_donor_no')}: ${_id(d)}', bold: true);
-    put(0, 2, '${tr('col_reg_date')}: ${_d(d.firstDate)}   ${tr('sex')}: ${d.sex.isEmpty ? '—' : d.sex}');
+    put(0, 2, '${tr('col_name')}: ${d.name.isEmpty ? '—' : d.name}   ${tr('col_reg_date')}: ${_d(d.firstDate)}   ${tr('sex')}: ${d.sex.isEmpty ? '—' : d.sex}');
     final headers = <String>[tr('date_label'), tr('contribution_name'), tr('amount'), tr('receipt_no')];
     for (var i = 0; i < headers.length; i++) {
       put(i, 4, headers[i], bold: true);
