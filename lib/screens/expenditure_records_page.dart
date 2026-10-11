@@ -5,182 +5,198 @@ import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../widgets/name_picker.dart';
 
-class ExpenditureRecordsPage extends StatefulWidget {
-  const ExpenditureRecordsPage({super.key});
+class ExpenditureInputPage extends StatefulWidget {
+  const ExpenditureInputPage({super.key});
   @override
-  State<ExpenditureRecordsPage> createState() => _ExpenditureRecordsPageState();
+  State<ExpenditureInputPage> createState() => _ExpenditureInputPageState();
 }
 
-class _ExpenditureRecordsPageState extends State<ExpenditureRecordsPage> {
-  final _search = TextEditingController();
-  DateTime? _from;
-  DateTime? _to;
-  String _category = 'ALL';
-  List<String> _expenseCategories = NameCatalog.expenditureDefaults;
-  bool _loading = true;
-  List<Map<String, Object?>> _records = [];
+class _ExpenseRow {
+  final description = TextEditingController();
+  final payee = TextEditingController();
+  final reference = TextEditingController();
+  final amount = TextEditingController();
+  bool get empty => description.text.trim().isEmpty && amount.text.trim().isEmpty;
+  void dispose() { description.dispose(); payee.dispose(); reference.dispose(); amount.dispose(); }
+}
+
+class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
+  DateTime _date = DateTime.now();
+  String? _category; // jina la matumizi lililochaguliwa
+  List<String> _names = NameCatalog.expenditureDefaults;
+  final _fund = TextEditingController();
+  final _note = TextEditingController();
+  final List<_ExpenseRow> _rows = [_ExpenseRow()];
+  bool _saving = false;
 
   @override
-  void initState() { super.initState(); _load(); }
-  @override
-  void dispose() { _search.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    _loadNames();
+  }
 
-  Future<void> _load() async {
-    if (mounted) setState(() => _loading = true);
-    try {
-      final names = await NameCatalog.expenditures();
-      final rows = await AppDb.instance.getExpenditureBatches(search: _search.text, from: _from, to: _to, category: _category == 'ALL' ? null : _category);
-      if (mounted) setState(() { _records = rows; _expenseCategories = names; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-      _message(tr('expense_read_failed'), error: true);
+  Future<void> _loadNames() async {
+    final names = await NameCatalog.expenditures();
+    if (mounted) setState(() => _names = names);
+  }
+
+  Future<void> _addName(String name) async {
+    final v = await NameCatalog.add(NameKind.expenditure, name);
+    await _loadNames();
+    if (mounted) {
+      setState(() {
+        _category = v;
+        _fund.text = v; // MFUKO WA CHANZO ujijaze
+      });
     }
   }
 
-  String _date(Object? raw) {
-    final d = DateTime.tryParse('${raw ?? ''}');
-    if (d == null) return '${raw ?? ''}';
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-  }
-  double _number(Object? value) => (value as num?)?.toDouble() ?? 0;
-  String _money(Object? value) => _number(value).round().toString();
-  double get _filteredTotal => _records.fold<double>(0, (sum, row) => sum + _number(row['total']));
-
-  Future<void> _pickDate(bool start) async {
-    final initial = start ? (_from ?? DateTime.now()) : (_to ?? _from ?? DateTime.now());
-    final picked = await showDatePicker(context: context, initialDate: initial, firstDate: DateTime(2020), lastDate: DateTime(2100));
-    if (picked == null) return;
-    setState(() { if (start) { _from = picked; } else { _to = picked; } });
-    await _load();
+  @override
+  void dispose() {
+    _fund.dispose(); _note.dispose();
+    for (final r in _rows) r.dispose();
+    super.dispose();
   }
 
-  void _message(String value, {bool error = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value), behavior: SnackBarBehavior.floating, backgroundColor: error ? Colors.red.shade700 : C.teal));
+  String _money(double value) => value.round().toString();
+  double _num(String v) => double.tryParse(v.replaceAll(',', '').trim()) ?? 0;
+  double get _total => _rows.fold(0, (s, r) => s + _num(r.amount.text));
+
+  Future<void> _pickDate() async {
+    final d = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2100), helpText: tr('select_expenditure_date'));
+    if (d != null) setState(() => _date = d);
   }
 
-  Future<void> _showDetails(Map<String, Object?> batch) async {
-    final id = (batch['id'] as num).toInt();
-    final entries = await AppDb.instance.getExpenditureBatchDetails(id);
-    if (!mounted) return;
-    await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
-      title: Text('${batch['category']} • ${_date(batch['date'])}'),
-      content: SizedBox(width: 650, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _detailLine(tr('fund'), '${batch['fund_name']}'.isEmpty ? '—' : fundLabel(batch['fund_name'])),
-        if ('${batch['note']}'.trim().isNotEmpty) _detailLine(tr('notes_label'), '${batch['note']}'),
-        const Divider(height: 24),
-        for (final entry in entries) Card(color: C.bg, elevation: 0, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${entry['description']}', style: const TextStyle(fontWeight: FontWeight.w800, color: C.text)),
-          const SizedBox(height: 5), Text('${tr('payee')}: ${entry['payee'] ?? '—'}   •   ${tr('exp_voucher')}: ${entry['reference'] ?? '—'}', style: const TextStyle(color: C.muted, fontSize: 12)),
-          const SizedBox(height: 5), Text('${_money(entry['amount'])} TZS', style: const TextStyle(color: C.navy, fontWeight: FontWeight.w800)),
-        ]))),
-        const Divider(height: 24), Align(alignment: Alignment.centerRight, child: Text('${tr('total').toUpperCase()}: ${_money(batch['total'])} TZS', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: C.navy))),
-      ]))),
-      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(tr('close'))), FilledButton.icon(onPressed: () { Navigator.pop(dialogContext); _edit(batch); }, icon: const Icon(Icons.edit_outlined), label: Text(tr('edit')))],
-    ));
+  void _addRow() => setState(() => _rows.add(_ExpenseRow()));
+  void _removeRow(int i) { if (_rows.length == 1) return; final r = _rows.removeAt(i); r.dispose(); setState(() {}); }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final category = _category;
+    if (category == null || category.trim().isEmpty) return _snack(tr('expense_name_required'), error: true);
+    final valid = _rows.where((r) => !r.empty).toList();
+    if (valid.isEmpty) return _snack(tr('expense_add_one'), error: true);
+    for (final r in valid) {
+      if (r.description.text.trim().isEmpty || _num(r.amount.text) <= 0) {
+        return _snack(tr('expense_row_invalid'), error: true);
+      }
+    }
+    setState(() => _saving = true);
+    try {
+      final batchId = await AppDb.instance.saveExpenditureBatch(
+        date: _date.toIso8601String(), category: category,
+        fundName: _fund.text.trim(), note: _note.text.trim(),
+        rows: [for (final r in valid) {
+          'description': r.description.text.trim(),
+          'payee': r.payee.text.trim(),
+          'reference': r.reference.text.trim(),
+          'amount': _num(r.amount.text),
+        }],
+      );
+      final savedTotal = valid.fold<double>(0, (s, r) => s + _num(r.amount.text));
+      await AppDb.instance.audit('EXPENDITURE_SAVED', 'batch=$batchId; category=$category; rows=${valid.length}; total=$savedTotal');
+      for (final r in _rows) r.dispose();
+      _rows
+        ..clear()
+        ..add(_ExpenseRow());
+      _note.clear();
+      setState(() {});
+      _snack('${tr('saved_successfully')} — ${_money(savedTotal)} TZS');
+    } catch (_) {
+      _snack(tr('save_failed'), error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
-  Widget _detailLine(String label, String value) => Padding(padding: const EdgeInsets.only(bottom: 7), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 90, child: Text('$label:', style: const TextStyle(color: C.muted))), Expanded(child: Text(value, style: const TextStyle(color: C.text, fontWeight: FontWeight.w600)))]));
-
-  Future<void> _edit(Map<String, Object?> batch) async {
-    final id = (batch['id'] as num).toInt();
-    final details = await AppDb.instance.getExpenditureBatchDetails(id);
-    if (!mounted) return;
-    final fund = TextEditingController(text: '${batch['fund_name'] ?? ''}');
-    final note = TextEditingController(text: '${batch['note'] ?? ''}');
-    final rows = details.map((e) => _EditExpenseRow(description: '${e['description'] ?? ''}', payee: '${e['payee'] ?? ''}', reference: '${e['reference'] ?? ''}', amount: '${e['amount'] ?? ''}')).toList();
-    var editDate = DateTime.tryParse('${batch['date']}') ?? DateTime.now();
-    var editCategory = _expenseCategories.contains(batch['category']) ? '${batch['category']}' : _expenseCategories.first;
-    var saving = false;
-    final saved = await showDialog<bool>(context: context, barrierDismissible: false, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(
-      title: Text(tr('expense_edit_title')),
-      content: SizedBox(width: 760, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        OutlinedButton.icon(onPressed: () async { final d = await showDatePicker(context: ctx, initialDate: editDate, firstDate: DateTime(2020), lastDate: DateTime(2100)); if (d != null) setDialogState(() => editDate = d); }, icon: const Icon(Icons.calendar_month), label: Text('${tr('date_label')}: ${_date(editDate.toIso8601String())}')),
-        const SizedBox(height: 10),
-        NamePicker(
-          label: tr('expense_name'),
-          icon: Icons.label_outline,
-          items: _expenseCategories,
-          value: editCategory,
-          onChanged: (v) => setDialogState(() => editCategory = v),
-          onAdd: (name) async {
-            final added = await NameCatalog.add(NameKind.expenditure, name);
-            final names = await NameCatalog.expenditures();
-            if (!mounted) return;
-            setState(() => _expenseCategories = names);
-            setDialogState(() => editCategory = added);
-          },
-        ),
-        const SizedBox(height: 10), TextField(controller: fund, decoration: InputDecoration(labelText: tr('exp_fund_source'))),
-        const SizedBox(height: 10), TextField(controller: note, maxLines: 2, decoration: InputDecoration(labelText: tr('exp_general_note'))),
-        const SizedBox(height: 14),
-        for (var i = 0; i < rows.length; i++) Container(padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: C.bg, borderRadius: BorderRadius.circular(12)), child: Column(children: [
-          TextField(controller: rows[i].description, decoration: InputDecoration(labelText: tr('exp_desc_title'))),
-          const SizedBox(height: 8), TextField(controller: rows[i].payee, decoration: InputDecoration(labelText: tr('payee'))),
-          const SizedBox(height: 8), TextField(controller: rows[i].reference, decoration: InputDecoration(labelText: tr('exp_ref_title'))),
-          const SizedBox(height: 8), TextField(controller: rows[i].amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: tr('amount'))),
-          Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: rows.length == 1 ? null : () => setDialogState(() => rows.removeAt(i).dispose()), icon: const Icon(Icons.delete_outline), label: Text(tr('expense_remove_row')))),
-        ])),
-        OutlinedButton.icon(onPressed: () => setDialogState(() => rows.add(_EditExpenseRow())), icon: const Icon(Icons.add), label: Text(tr('expense_add_row'))),
-      ]))),
-      actions: [TextButton(onPressed: saving ? null : () => Navigator.pop(ctx, false), child: Text(tr('cancel'))), FilledButton.icon(onPressed: saving ? null : () async {
-        final valid = <Map<String, Object?>>[];
-        for (final row in rows) {
-          final amount = double.tryParse(row.amount.text.replaceAll(',', '').trim()) ?? 0;
-          if (row.description.text.trim().isEmpty || amount <= 0) { _message(tr('expense_row_invalid'), error: true); return; }
-          valid.add({'description': row.description.text.trim(), 'payee': row.payee.text.trim(), 'reference': row.reference.text.trim(), 'amount': amount});
-        }
-        setDialogState(() => saving = true);
-        try { await AppDb.instance.updateExpenditureBatch(batchId: id, date: editDate.toIso8601String(), category: editCategory, fundName: fund.text, note: note.text, rows: valid); if (ctx.mounted) Navigator.pop(ctx, true); }
-        catch (_) { setDialogState(() => saving = false); _message(tr('expense_edit_failed'), error: true); }
-      }, icon: saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined), label: Text(tr('save_changes')))],
-    )));
-    fund.dispose(); note.dispose(); for (final row in rows) { row.dispose(); }
-    if (saved == true) { _message(tr('expense_edit_success')); await _load(); }
-  }
-
-  Future<void> _delete(Map<String, Object?> batch) async {
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: Text(tr('expense_delete_title')), content: Text(tr('exp_delete_confirm').replaceAll('{name}', '${batch['category']}').replaceAll('{date}', _date(batch['date']))), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('cancel'))), FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700), child: Text(tr('delete')))]));
-    if (ok != true) return;
-    try { await AppDb.instance.deleteExpenditureBatch((batch['id'] as num).toInt()); _message(tr('expense_delete_success')); await _load(); } catch (_) { _message(tr('delete_failed'), error: true); }
-  }
+  void _snack(String text, {bool error = false}) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating, backgroundColor: error ? Colors.red.shade700 : C.teal));
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: L10n.instance, builder: (context, _) => RefreshIndicator(onRefresh: _load, child: SingleChildScrollView(physics: const AlwaysScrollableScrollPhysics(), padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36), child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1250), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    _header(), const SizedBox(height: 16), _filters(), const SizedBox(height: 14), _totals(), const SizedBox(height: 14),
-    if (_loading) const Padding(padding: EdgeInsets.all(44), child: Center(child: CircularProgressIndicator())) else if (_records.isEmpty) _empty() else ..._records.map(_recordCard),
-  ]))))));
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: L10n.instance,
+    builder: (_, __) => SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 40),
+      child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1250), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _hero(), const SizedBox(height: 16), _contextCard(), const SizedBox(height: 16), _categoryBar(), const SizedBox(height: 12), _entryCard(),
+      ]))),
+    ),
+  );
 
-  Widget _header() => Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(color: C.navy, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: C.navy.withOpacity(.12), blurRadius: 18, offset: const Offset(0, 8))]), child: Row(children: [Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.white.withOpacity(.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.receipt_long, color: Colors.white)), const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('nav_matumizi_records'), style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(tr('expense_records_subtitle'), style: const TextStyle(color: Colors.white70, fontSize: 13))])), IconButton(onPressed: _load, tooltip: tr('dash_refresh'), icon: const Icon(Icons.refresh, color: Colors.white))]));
+  Widget _hero() => Container(
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(color: C.navy, borderRadius: BorderRadius.circular(18)),
+    child: Row(children: [
+      Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: C.gold.withOpacity(.16), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.payments_outlined, color: C.gold, size: 30)),
+      const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('nav_matumizi_input').toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(tr('exp_in_sub'), style: const TextStyle(color: Colors.white70, fontSize: 13))])),
+    ]),
+  );
 
-  Widget _filters() => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: LayoutBuilder(builder: (context, box) {
-    final compact = box.maxWidth < 800;
-    final search = TextField(controller: _search, onSubmitted: (_) => _load(), onChanged: (_) => setState(() {}), decoration: InputDecoration(hintText: tr('expense_search_hint'), prefixIcon: const Icon(Icons.search), suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: () { _search.clear(); _load(); setState(() {}); }, icon: const Icon(Icons.clear))));
-    final category = DropdownButtonFormField<String>(value: _category, isExpanded: true, decoration: InputDecoration(labelText: tr('summary_category')), items: [DropdownMenuItem(value: 'ALL', child: Text(tr('expense_category_all'))), for (final c in _expenseCategories) DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))], onChanged: (v) { if (v != null) setState(() => _category = v); _load(); });
-    final from = OutlinedButton.icon(onPressed: () => _pickDate(true), icon: const Icon(Icons.event), label: Text(_from == null ? tr('from_date') : _date(_from!.toIso8601String())));
-    final to = OutlinedButton.icon(onPressed: () => _pickDate(false), icon: const Icon(Icons.event), label: Text(_to == null ? tr('to_date') : _date(_to!.toIso8601String())));
-    final clear = TextButton.icon(onPressed: (_from == null && _to == null && _search.text.isEmpty && _category == 'ALL') ? null : () { setState(() { _from = null; _to = null; _category = 'ALL'; _search.clear(); }); _load(); }, icon: const Icon(Icons.filter_alt_off), label: Text(tr('clear_filters')));
-    if (compact) return Column(children: [search, const SizedBox(height: 10), category, const SizedBox(height: 10), Row(children: [Expanded(child: from), const SizedBox(width: 8), Expanded(child: to)]), Align(alignment: Alignment.centerRight, child: clear)]);
-    return Column(children: [Row(children: [Expanded(flex: 3, child: search), const SizedBox(width: 10), Expanded(flex: 2, child: category)]), const SizedBox(height: 10), Row(children: [from, const SizedBox(width: 8), to, const Spacer(), clear])]);
-  }));
+  Widget _contextCard() => Card(
+    elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
+    child: Padding(padding: const EdgeInsets.all(18), child: LayoutBuilder(builder: (_, c) {
+      final narrow = c.maxWidth < 760;
+      final fields = [
+        _field(tr('exp_date_title').toUpperCase(), TextField(controller: TextEditingController(text: '${_date.day.toString().padLeft(2,'0')}/${_date.month.toString().padLeft(2,'0')}/${_date.year}'), readOnly: true, onTap: _pickDate, decoration: _decoration(Icons.calendar_today_outlined))),
+        _field(tr('exp_fund_source').toUpperCase(), TextField(controller: _fund, decoration: _decoration(Icons.account_balance_wallet_outlined, hint: tr('exp_fund_hint')))),
+      ];
+      return Flex(direction: narrow ? Axis.vertical : Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.start, children: [for (var i=0;i<fields.length;i++) Expanded(flex: 1, child: Padding(padding: EdgeInsets.only(right: (!narrow && i==0)?10:0, bottom: narrow?10:0), child: fields[i]))]);
+    })),
+  );
 
-  Widget _totals() => LayoutBuilder(builder: (context, box) { final compact = box.maxWidth < 600; return Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: C.teal.withOpacity(.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: C.teal.withOpacity(.25))), child: Row(children: [Container(width: 44, height: 44, decoration: BoxDecoration(color: C.teal, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.payments_outlined, color: Colors.white)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('expense_filtered_total'), style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.w800, color: C.muted)), const SizedBox(height: 4), Text('${_money(_filteredTotal)} TZS', style: TextStyle(fontSize: compact ? 20 : 24, fontWeight: FontWeight.w900, color: C.navy))])), Text('${_records.length} ${tr('expense_records_count')}', style: const TextStyle(color: C.teal, fontWeight: FontWeight.w800))])); });
+  Widget _field(String label, Widget child) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: .4)), const SizedBox(height: 7), child]);
+  InputDecoration _decoration(IconData icon, {String? hint}) => InputDecoration(prefixIcon: Icon(icon, size: 19), hintText: hint, filled: true, fillColor: Colors.grey.shade50, border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: Colors.grey.shade300)), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: Colors.grey.shade300)));
 
-  Widget _recordCard(Map<String, Object?> row) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: LayoutBuilder(builder: (context, box) {
-    final compact = box.maxWidth < 680;
-    final body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${row['category']}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: C.navy)), const SizedBox(height: 5), Text('${_date(row['date'])} • ${row['entries']} ${tr('rows')}', style: const TextStyle(color: C.muted, fontSize: 12)), if ('${row['fund_name']}'.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 5), child: Text('${tr('fund')}: ${fundLabel(row['fund_name'])}', style: const TextStyle(color: C.text, fontSize: 12))), const SizedBox(height: 8), Text('${_money(row['total'])} TZS', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: C.teal))]);
-    final actions = Wrap(spacing: 4, children: [IconButton(tooltip: tr('view_details'), onPressed: () => _showDetails(row), icon: const Icon(Icons.visibility_outlined, color: C.navy)), IconButton(tooltip: tr('edit'), onPressed: () => _edit(row), icon: const Icon(Icons.edit_outlined, color: C.teal)), IconButton(tooltip: tr('delete'), onPressed: () => _delete(row), icon: Icon(Icons.delete_outline, color: Colors.red.shade700))]);
-    return compact ? Row(children: [Expanded(child: body), actions]) : Row(children: [Container(width: 46, height: 46, decoration: BoxDecoration(color: C.navy.withOpacity(.07), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.receipt_long, color: C.navy)), const SizedBox(width: 14), Expanded(child: body), actions]);
-  })));
+  Widget _categoryBar() => Card(
+    elevation: 0,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: NamePicker(
+        label: tr('expense_name'),
+        icon: Icons.label_outline,
+        items: _names,
+        value: _category,
+        onChanged: (v) => setState(() {
+          _category = v;
+          _fund.text = v; // MFUKO WA CHANZO ujijaze
+        }),
+        onAdd: _addName,
+      ),
+    ),
+  );
 
-  Widget _empty() => Container(width: double.infinity, padding: const EdgeInsets.all(38), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Column(children: [const Icon(Icons.inbox_outlined, size: 46, color: C.muted), const SizedBox(height: 10), Text(tr('expense_empty'), textAlign: TextAlign.center, style: const TextStyle(color: C.muted))]));
-}
+  Widget _entryCard() => Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)), child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    LayoutBuilder(builder: (_, hc) {
+      final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_category ?? tr('expense_name'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text('${_rows.length} ${tr('expense_entries')}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))]);
+      final totalText = Text('${tr('total').toUpperCase()}: ${_money(_total)} TZS', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15));
+      final addBtn = OutlinedButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: Text(tr('add_row')));
+      if (hc.maxWidth < 560) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [titleBlock, const SizedBox(height: 10), Row(children: [Expanded(child: totalText), addBtn])]);
+      }
+      return Row(children: [Expanded(child: titleBlock), totalText, const SizedBox(width: 12), addBtn]);
+    }),
+    const SizedBox(height: 14),
+    ...List.generate(_rows.length, (i) => _row(i)),
+    const SizedBox(height: 12),
+    TextField(controller: _note, maxLines: 2, decoration: _decoration(Icons.notes_outlined, hint: tr('exp_note_hint'))),
+    const SizedBox(height: 16),
+    Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _saving ? null : _save, icon: _saving ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : const Icon(Icons.save_outlined), label: Text(_saving ? tr('saving') : tr('exp_save_btn').toUpperCase()))),
+  ])));
 
-class _EditExpenseRow {
-  final TextEditingController description;
-  final TextEditingController payee;
-  final TextEditingController reference;
-  final TextEditingController amount;
-  _EditExpenseRow({String description = '', String payee = '', String reference = '', String amount = ''}) : description = TextEditingController(text: description), payee = TextEditingController(text: payee), reference = TextEditingController(text: reference), amount = TextEditingController(text: amount);
-  void dispose() { description.dispose(); payee.dispose(); reference.dispose(); amount.dispose(); }
+  Widget _row(int i) {
+    final r = _rows[i];
+    return Padding(padding: const EdgeInsets.only(bottom: 10), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(13), border: Border.all(color: Colors.grey.shade200)), child: LayoutBuilder(builder: (_, c) {
+      final narrow = c.maxWidth < 800;
+      final children = [
+        _field(tr('exp_desc_title').toUpperCase(), TextField(controller:r.description, onChanged:(_)=>setState((){}), decoration:_decoration(Icons.description_outlined, hint:tr('exp_desc_hint')))),
+        _field(tr('payee').toUpperCase(), TextField(controller:r.payee, decoration:_decoration(Icons.person_outline, hint:tr('exp_payee_hint')))),
+        _field(tr('exp_ref_title').toUpperCase(), TextField(controller:r.reference, decoration:_decoration(Icons.tag, hint:tr('exp_ref_hint')))),
+        _field(tr('amount').toUpperCase(), TextField(controller:r.amount, keyboardType:const TextInputType.numberWithOptions(decimal:true), onChanged:(_)=>setState((){}), decoration:_decoration(Icons.payments_outlined, hint:'0'))),
+      ];
+      if (narrow) return Column(children:[for(final x in children) Padding(padding:const EdgeInsets.only(bottom:8),child:x), Align(alignment:Alignment.centerRight,child:IconButton(onPressed:()=>_removeRow(i), icon:const Icon(Icons.delete_outline))) ]);
+      return Row(crossAxisAlignment:CrossAxisAlignment.end, children:[Expanded(flex:3,child:children[0]),const SizedBox(width:8),Expanded(flex:2,child:children[1]),const SizedBox(width:8),Expanded(flex:2,child:children[2]),const SizedBox(width:8),Expanded(flex:2,child:children[3]),IconButton(onPressed:()=>_removeRow(i), icon:const Icon(Icons.delete_outline))]);
+    })));
+  }
 }
