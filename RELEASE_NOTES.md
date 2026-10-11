@@ -2,3 +2,6 @@
 - Added near-real-time multi-device synchronization with Realtime updates plus automatic local-change upload.
 - Removed the old viewer write-block that caused the red “Imeshindikana kuhifadhi” error on linked devices.
 - Added conflict-safe synchronization so devices can work at the same time without one device locking another.
+- Jina la mfumo sasa ni TAG SHALOM KIBAMBA TEMPO HOSPITAL (app, skrini ya kuanza, PDF, Excel na installer).
+- Logo ya TAG imewekwa kwenye icon ya app (Android na Windows), skrini ya kuanza na vichwa vya PDF.
+- Maandishi ya fomu na ripoti za matumizi yamesanifishwa kuwa Kiswahili pekee (bila kuchanganya lugha).
