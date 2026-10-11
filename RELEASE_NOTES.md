@@ -5,3 +5,7 @@
 - Jina la mfumo sasa ni TAG SHALOM KIBAMBA TEMPO HOSPITAL (app, skrini ya kuanza, PDF, Excel na installer).
 - Logo ya TAG imewekwa kwenye icon ya app (Android na Windows), skrini ya kuanza na vichwa vya PDF.
 - Maandishi ya fomu na ripoti za matumizi yamesanifishwa kuwa Kiswahili pekee (bila kuchanganya lugha).
+- Maingizo ya Michango: "Jina la Mchango" sasa ni orodha ya kuchagua (FUNGU, INJILI, UJENZI, WAJANE, MAANDIKO, SHUKRANI, UMISHENI, SADAKA) yenye chaguo la kuongeza jina jipya.
+- Maingizo ya Matumizi: "Jina la Matumizi" ni orodha ya kuchagua (UJENZI, MALIPO YA WAHUDUMU, MALIPO YA MATENGENEZO, MALIPO YA MANUNUZI) yenye chaguo la kuongeza jina jipya.
+- Imeongezwa sehemu ya Jinsia (KE/ME) kwenye kila mstari wa mchango; inaonekana kwenye rekodi na exports.
+- Muhtasari wa Matumizi, Salio na Dashibodi sasa vinaonyesha pia majina mapya yaliyoongezwa.
