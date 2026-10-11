@@ -19,19 +19,39 @@ class DonorEntry {
   final double amount;
   final String receiptNo;
   final int service;
+
+  /// Muda ambao mchango huu uliingizwa kwenye mfumo (tarehe na saa).
+  final DateTime? recordedAt;
   const DonorEntry({
     required this.date,
     required this.contributionName,
     required this.amount,
     required this.receiptNo,
     required this.service,
+    this.recordedAt,
   });
+
+  static String _two(int v) => v.toString().padLeft(2, '0');
+
+  /// Saa ya kuingizwa (HH:mm). Ikiwa iliingizwa siku tofauti na tarehe ya mchango,
+  /// tarehe ya kuingizwa inaonyeshwa pia (dd/MM HH:mm). Tupu kama muda haujulikani.
+  String get timeLabel {
+    final r = recordedAt;
+    if (r == null) return '';
+    final t = '${_two(r.hour)}:${_two(r.minute)}';
+    final sameDay = r.year == date.year && r.month == date.month && r.day == date.day;
+    return sameDay ? t : '${_two(r.day)}/${_two(r.month)} $t';
+  }
+
+  /// Muda unaotumika kupanga michango kutoka mpya hadi ya zamani.
+  DateTime get sortTime => recordedAt ?? date;
 }
 
 class DonorRecord {
   final String key;
-  final bool isFungu;
-  final String idNo;
+  /// Kweli ikiwa mtoaji ana mchango wa FUNGU (hata kama ana aina nyingine pia).
+  bool isFungu;
+  String idNo;
   String name = '';
   String contact = '';
   String sex = '';
@@ -113,11 +133,18 @@ class ContributionMatrix {
       final isFungu = r['type'] == 'FUNGU';
       final idNo = '${r['id_no'] ?? ''}'.trim();
       final donorName = '${r['donor_name'] ?? ''}'.trim();
-      final key = '${isFungu ? 'F' : 'O'}|${idNo.isNotEmpty ? idNo : donorName}';
+      // Mtoaji mmoja anatambuliwa kwa jina (herufi kubwa, nafasi moja) ili michango yake yote,
+      // ya aina yoyote, ikae kwenye rekodi moja. Namba ya michango isiyo FUNGU hutengenezwa
+      // na mfumo, kwa hiyo haiwezi kutumika kumtambua mtoaji. Jina likikosekana, tunatumia aina+namba.
+      final nameKey = donorName.toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+      final key = nameKey.isNotEmpty ? 'N|$nameKey' : '${isFungu ? 'F' : 'O'}|$idNo';
       final d = byKey.putIfAbsent(
         key,
         () => DonorRecord(key: key, isFungu: isFungu, idNo: idNo, firstDate: date),
       );
+      if (isFungu) d.isFungu = true;
+      // Namba ya bahasha (FUNGU) ndiyo namba ya mtoaji; isiyo FUNGU inatumika tu kama hakuna nyingine.
+      if (idNo.isNotEmpty && (isFungu || d.idNo.isEmpty)) d.idNo = idNo;
       if (date.isBefore(d.firstDate)) d.firstDate = date;
       // Ledger imepangwa kwa tarehe inayopanda, kwa hiyo thamani ya mwisho isiyo tupu inashinda.
       if (donorName.isNotEmpty) d.name = donorName;
@@ -134,6 +161,7 @@ class ContributionMatrix {
         amount: amount,
         receiptNo: '${r['receipt_no'] ?? ''}',
         service: (r['service'] as num?)?.toInt() ?? 1,
+        recordedAt: DateTime.tryParse('${r['created_at'] ?? ''}')?.toLocal(),
       ));
 
       final inRange = (start == null || !date.isBefore(start)) &&
