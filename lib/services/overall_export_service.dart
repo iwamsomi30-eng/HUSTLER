@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
+import '../core/brand.dart';
 import 'file_saver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -34,23 +35,14 @@ class OverallExportService {
     required List<Map<String, Object?>> daily,
   }) async {
     final doc = pw.Document();
+    final logo = await Brand.pdfLogo();
     final income = (stats['income'] as num?)?.toDouble() ?? 0;
     final expense = (stats['expenditure'] as num?)?.toDouble() ?? 0;
     final balance = (stats['balance'] as num?)?.toDouble() ?? income - expense;
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(24),
-      header: (_) => pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('MFUKO WA MAPATO YA KANISA', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 3),
-            pw.Text('OVERALL DASHBOARD & TRENDS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-          ]),
-          pw.Text(periodLabel(from, to), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-        ],
-      ),
+      header: (_) => Brand.pdfHeader(logo: logo, title: 'MUHTASARI WA JUMLA NA MWELEKEO', trailing: periodLabel(from, to)),
       footer: (ctx) => pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Ukurasa ${ctx.pageNumber} / ${ctx.pagesCount}', style: const pw.TextStyle(fontSize: 8))),
       build: (_) => [
         pw.SizedBox(height: 14),
@@ -103,10 +95,10 @@ class OverallExportService {
 
   static Future<File> buildExcel({required DateTime? from, required DateTime? to, required Map<String, Object?> stats, required List<Map<String, Object?>> contributions, required List<Map<String, Object?>> categories, required List<Map<String, Object?>> funds, required List<Map<String, Object?>> daily}) async {
     final excel = Excel.createExcel();
-    final sheet = excel['Overall Dashboard'];
-    final title = ['MFUKO WA MAPATO YA KANISA', 'OVERALL DASHBOARD & TRENDS', periodLabel(from, to)];
+    final sheet = excel['Muhtasari wa Jumla'];
+    final title = [Brand.systemName, 'MUHTASARI WA JUMLA NA MWELEKEO', periodLabel(from, to)];
     for (var i = 0; i < title.length; i++) sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0)).value = TextCellValue(title[i]);
-    final headers = ['Metric', 'Value'];
+    final headers = ['Kipimo', 'Thamani'];
     for (var c = 0; c < headers.length; c++) sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 2)).value = TextCellValue(headers[c]);
     final metrics = [
       ['MAKUSANYO', (stats['income'] as num?)?.toDouble() ?? 0],
@@ -146,7 +138,7 @@ class OverallExportService {
 
   static Future<void> shareExcel({required DateTime? from, required DateTime? to, required Map<String, Object?> stats, required List<Map<String, Object?>> contributions, required List<Map<String, Object?>> categories, required List<Map<String, Object?>> funds, required List<Map<String, Object?>> daily}) async {
     final file = await buildExcel(from: from, to: to, stats: stats, contributions: contributions, categories: categories, funds: funds, daily: daily);
-    await Share.shareXFiles([XFile(file.path)], text: 'Overall Dashboard - ${periodLabel(from, to)}');
+    await Share.shareXFiles([XFile(file.path)], text: 'Muhtasari wa Jumla - ${periodLabel(from, to)}');
   }
 
   /// Inahifadhi Excel moja kwa moja kwenye kifaa (Downloads).
