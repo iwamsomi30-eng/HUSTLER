@@ -56,13 +56,20 @@ class SmsService {
     return v.round().toString();
   }
 
+  /// Jina la mchango lisijirudie: kila kilicho ndani ya mabano () kinaondolewa.
+  static String cleanPurpose(String raw) {
+    final t = raw.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return t.isEmpty ? raw.trim() : t;
+  }
+
   static String message(SmsItem i) {
     final d = '${i.date.day.toString().padLeft(2, '0')}/${i.date.month.toString().padLeft(2, '0')}/${i.date.year}';
     final amt = _money(i.amount);
+    final purpose = cleanPurpose(i.purpose);
     if (L10n.instance.lang == 'en') {
-      return 'Dear ${i.donorName}, your contribution of TZS $amt to ${i.purpose} was received on $d. Receipt: ${i.receiptNo}. Thank you, God bless you.';
+      return 'Dear ${i.donorName}, Your Contribution Of TZS $amt To $purpose Was Received On $d. Receipt: ${i.receiptNo}. Thank You, God Bless You.';
     }
-    return 'Mpendwa ${i.donorName}, mchango wako wa TZS $amt kwa ${i.purpose} umepokelewa tarehe $d. Risiti: ${i.receiptNo}. Asante, Mungu akubariki.';
+    return 'Mpendwa ${i.donorName}, Mchango Wako Wa TZS $amt Kwa $purpose Umepokelewa Tarehe $d. Risiti: ${i.receiptNo}. Asante, Mungu Akubariki.';
   }
 
   /// Haitupi kosa kamwe: kuhifadhi data hakuwezi kuharibiwa na SMS.
@@ -108,9 +115,9 @@ class SmsService {
     var text = explanation.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (text.isNotEmpty && !RegExp(r'[.!?]$').hasMatch(text)) text = '$text.';
     if (L10n.instance.lang == 'en') {
-      return 'Dear $donorName, ${Brand.systemName}. Correction to the notice sent for receipt no. $receiptNo: $text We apologise for the inconvenience. Thank you, God bless you.';
+      return 'Dear $donorName, ${Brand.systemName}. Correction To The Notice Sent For Receipt No. $receiptNo: $text We Apologise For The Inconvenience. Thank You, God Bless You.';
     }
-    return 'Mpendwa $donorName, ${Brand.systemName}. Marekebisho ya taarifa iliyotumwa kwa risiti namba $receiptNo: $text Samahani kwa usumbufu. Asante, Mungu akubariki.';
+    return 'Mpendwa $donorName, ${Brand.systemName}. Marekebisho Ya Taarifa Iliyotumwa Kwa Risiti Namba $receiptNo: $text Samahani Kwa Usumbufu. Asante, Mungu Akubariki.';
   }
 
   /// Idadi ya SMS (vipande) ambazo ujumbe utatumia: 160/153 kwa herufi za kawaida,
