@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import '../core/catalog.dart';
 import '../core/contribution_matrix.dart';
@@ -8,6 +9,26 @@ import '../services/contribution_export_service.dart';
 import '../services/matrix_export_service.dart';
 import 'donor_profile_page.dart';
 import '../widgets/name_picker.dart';
+
+/// Inaruhusu kuburuta jedwali kwa mouse/touchpad/kalamu (si kwa kidole tu),
+/// ili kuscroll horizontally kuwe rahisi kwenye kompyuta pia.
+class _DragAnywhere extends MaterialScrollBehavior {
+  final bool autoScrollbar;
+  const _DragAnywhere({this.autoScrollbar = true});
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.unknown,
+      };
+
+  @override
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) =>
+      autoScrollbar ? super.buildScrollbar(context, child, details) : child;
+}
 
 class ContributionRecordsPage extends StatefulWidget {
   const ContributionRecordsPage({super.key});
@@ -27,16 +48,42 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
   int? _year;
   ContributionMatrix? _matrix;
 
+  // Jedwali: scroll ya kulia/kushoto na ya juu/chini (safu za kushoto zinakaa mahali pamoja).
+  final _hScroll = ScrollController();
+  final _vLeft = ScrollController();
+  final _vRight = ScrollController();
+  bool _vSyncing = false;
+
   @override
   void initState() {
     super.initState();
+    _vLeft.addListener(() => _linkV(_vLeft, _vRight));
+    _vRight.addListener(() => _linkV(_vRight, _vLeft));
     _load();
   }
 
   @override
   void dispose() {
     _search.dispose();
+    _hScroll.dispose();
+    _vLeft.dispose();
+    _vRight.dispose();
     super.dispose();
+  }
+
+  /// Panel mbili (kushoto/kulia) zinasogea juu/chini pamoja.
+  void _linkV(ScrollController from, ScrollController to) {
+    if (_vSyncing || !from.hasClients || !to.hasClients) return;
+    _vSyncing = true;
+    final target = from.offset.clamp(0.0, to.position.maxScrollExtent).toDouble();
+    if ((to.offset - target).abs() > 0.5) to.jumpTo(target);
+    _vSyncing = false;
+  }
+
+  void _scrollH(double target) {
+    if (!_hScroll.hasClients) return;
+    final max = _hScroll.position.maxScrollExtent;
+    _hScroll.animateTo(target.clamp(0.0, max).toDouble(), duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
   }
 
   Future<void> _load() async {
@@ -254,19 +301,33 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
     child: Text(text, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
   );
 
-  Widget _matrixHeader() => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    _hcell(tr('col_no'), _wNo),
-    _hcell(tr('col_name'), _wName),
-    _hcell(tr('env_or_donor_no'), _wId),
-    _hcell(tr('col_reg_date'), _wReg),
-    _hcell(tr('contact'), _wContact),
-    for (var mo = 1; mo <= 12; mo++)
-      Column(children: [
-        _hcell(tr('month_$mo'), _wCell * 5, h: 28, bg: mo.isOdd ? C.navy : C.teal),
-        Row(children: [for (var w = 1; w <= 5; w++) _hcell('$w', _wCell, h: 24, bg: mo.isOdd ? C.navy : C.teal)]),
-      ]),
-    _hcell(tr('total'), _wTot),
-  ]);
+  List<MapEntry<String, double>> _infoCols() => [
+    MapEntry(tr('col_no'), _wNo),
+    MapEntry(tr('col_name'), _wName),
+    MapEntry(tr('env_or_donor_no'), _wId),
+    MapEntry(tr('col_reg_date'), _wReg),
+    MapEntry(tr('contact'), _wContact),
+  ];
+
+  /// Safu za kwanza zinazokaa mahali pamoja wakati wa kuscroll kulia.
+  int get _stickyCount => isPhone(context) ? 2 : 3;
+
+  Widget _matrixHeader({required bool sticky}) {
+    final cols = _infoCols();
+    final n = _stickyCount;
+    final info = sticky ? cols.sublist(0, n) : cols.sublist(n);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final c in info) _hcell(c.key, c.value),
+      if (!sticky) ...[
+        for (var mo = 1; mo <= 12; mo++)
+          Column(children: [
+            _hcell(tr('month_$mo'), _wCell * 5, h: 28, bg: mo.isOdd ? C.navy : C.teal),
+            Row(children: [for (var w = 1; w <= 5; w++) _hcell('$w', _wCell, h: 24, bg: mo.isOdd ? C.navy : C.teal)]),
+          ]),
+        _hcell(tr('total'), _wTot),
+      ],
+    ]);
+  }
 
   Widget _amountCell(MatrixCell? c, int month) {
     final amount = c?.amount ?? 0;
@@ -284,7 +345,7 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
     return has ? Tooltip(message: c!.names.join(', '), child: box) : box;
   }
 
-  Widget _matrixRow(int index, DonorRecord d, int year) {
+  Widget _matrixRow(int index, DonorRecord d, int year, {required bool sticky}) {
     Widget cell(String t, double w, {bool left = true, bool bold = false}) => Container(
       width: w,
       height: _rowH,
@@ -292,31 +353,78 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, color: C.text)),
     );
+    String info(int c) {
+      switch (c) {
+        case 0:
+          return '${index + 1}';
+        case 1:
+          return _showNames ? (d.name.isEmpty ? '—' : d.name) : '••••••••';
+        case 2:
+          return d.idNo.isEmpty ? '—' : d.idNo;
+        case 3:
+          return _date(d.firstDate.toIso8601String());
+        default:
+          return _showNames ? (d.contact.isEmpty ? '—' : d.contact) : '••••••••';
+      }
+    }
+    const widths = [_wNo, _wName, _wId, _wReg, _wContact];
+    final n = _stickyCount;
+    final from = sticky ? 0 : n;
+    final to = sticky ? n : 5;
     final yt = d.yearTotal(year);
     return InkWell(
       onTap: () => _openDonor(d),
       child: Container(
         color: index.isEven ? Colors.white : C.bg,
         child: Row(children: [
-          cell('${index + 1}', _wNo, left: false),
-          cell(_showNames ? (d.name.isEmpty ? '—' : d.name) : '••••••••', _wName),
-          cell(d.idNo.isEmpty ? '—' : d.idNo, _wId),
-          cell(_date(d.firstDate.toIso8601String()), _wReg),
-          cell(_showNames ? (d.contact.isEmpty ? '—' : d.contact) : '••••••••', _wContact),
-          for (var mo = 1; mo <= 12; mo++)
-            for (var w = 1; w <= 5; w++) _amountCell(d.cell(year, mo, w), mo),
-          cell(yt > 0 ? _money(yt) : '', _wTot, left: false, bold: true),
+          for (var c = from; c < to; c++) cell(info(c), widths[c], left: c != 0),
+          if (!sticky) ...[
+            for (var mo = 1; mo <= 12; mo++)
+              for (var w = 1; w <= 5; w++) _amountCell(d.cell(year, mo, w), mo),
+            cell(yt > 0 ? _money(yt) : '', _wTot, left: false, bold: true),
+          ],
         ]),
       ),
     );
   }
+
+  /// Mishale ya kulia/kushoto na njia za mkato kwenda mwezi husika.
+  Widget _hNav(double restInfoW) => Row(children: [
+    IconButton(onPressed: () => _scrollH((_hScroll.hasClients ? _hScroll.offset : 0) - 320), icon: const Icon(Icons.chevron_left)),
+    IconButton(onPressed: () => _scrollH((_hScroll.hasClients ? _hScroll.offset : 0) + 320), icon: const Icon(Icons.chevron_right)),
+    Expanded(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (var mo = 1; mo <= 12; mo++)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ActionChip(
+                label: Text(tr('month_$mo'), style: const TextStyle(fontSize: 11.5)),
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _scrollH(restInfoW + (mo - 1) * 5 * _wCell),
+              ),
+            ),
+          ActionChip(
+            label: Text(tr('total'), style: const TextStyle(fontSize: 11.5)),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _scrollH(double.infinity),
+          ),
+        ]),
+      ),
+    ),
+  ]);
 
   Widget _matrixSection() {
     final m = _matrix;
     if (m == null || m.donors.isEmpty) return _empty();
     final year = (_year != null && m.years.contains(_year)) ? _year! : m.years.last;
     final yearTotal = m.donors.fold<double>(0, (s, d) => s + d.yearTotal(year));
-    final totalW = _wNo + _wName + _wId + _wReg + _wContact + _wCell * 60 + _wTot;
+    final infoW = _infoCols().map((c) => c.value).toList();
+    final n = _stickyCount;
+    final leftW = infoW.sublist(0, n).fold<double>(0, (a, b) => a + b);
+    final restInfoW = infoW.sublist(n).fold<double>(0, (a, b) => a + b);
+    final rightW = restInfoW + _wCell * 60 + _wTot;
     final listH = (m.donors.length * _rowH).clamp(_rowH * 2, 560.0).toDouble();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -342,26 +450,58 @@ class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
       const SizedBox(height: 6),
       Text(tr('matrix_hint'), style: const TextStyle(fontSize: 11.5, color: C.muted)),
       const SizedBox(height: 10),
+      _hNav(restInfoW),
       Container(
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: C.border)),
         clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: totalW,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Safu za kushoto: zinakaa mahali pamoja wakati wa kuscroll kulia.
+          Container(
+            width: leftW,
+            decoration: BoxDecoration(color: Colors.white, border: Border(right: BorderSide(color: C.border, width: 1.5))),
             child: Column(children: [
-              _matrixHeader(),
+              _matrixHeader(sticky: true),
               SizedBox(
                 height: listH,
                 child: ListView.builder(
+                  controller: _vLeft,
                   itemCount: m.donors.length,
                   itemExtent: _rowH,
-                  itemBuilder: (_, i) => _matrixRow(i, m.donors[i], year),
+                  itemBuilder: (_, i) => _matrixRow(i, m.donors[i], year, sticky: true),
                 ),
               ),
             ]),
           ),
-        ),
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: const _DragAnywhere(autoScrollbar: false),
+              child: Scrollbar(
+                controller: _hScroll,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _hScroll,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: rightW,
+                    child: Column(children: [
+                      _matrixHeader(sticky: false),
+                      SizedBox(
+                        height: listH,
+                        child: ListView.builder(
+                          controller: _vRight,
+                          itemCount: m.donors.length,
+                          itemExtent: _rowH,
+                          itemBuilder: (_, i) => _matrixRow(i, m.donors[i], year, sticky: false),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]),
       ),
     ]);
   }
@@ -493,10 +633,10 @@ class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
     return Padding(padding: const EdgeInsets.only(bottom: 12), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Container(width: 38, height: 38, decoration: BoxDecoration(color: (isFungu ? C.teal : C.gold).withOpacity(.12), borderRadius: BorderRadius.circular(10)), child: Icon(isFungu ? Icons.mail_outline : Icons.volunteer_activism_outlined, color: isFungu ? C.teal : C.gold)), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isFungu ? tr('fungu') : (head['title'] ?? tr('other_contributions')).toString(), style: const TextStyle(fontWeight: FontWeight.w800, color: C.text)), const SizedBox(height: 2), Text('${tr('service').toUpperCase()} ${head['service']} • ${rows.length} ${tr('records_entries')}', style: const TextStyle(fontSize: 12, color: C.muted))])), Text(_money(total), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy))]),
       const SizedBox(height: 12),
-      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : tr('name_no'))), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('sex'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text((r['sex'] ?? '—').toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else ScrollConfiguration(behavior: const _DragAnywhere(), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : tr('name_no'))), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('sex'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text((r['sex'] ?? '—').toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
         IconButton(tooltip: tr('delete'), icon: Icon(Icons.delete_outline, size: 19, color: Colors.red.shade700), onPressed: () => _deleteRow(r)),
-      ]))])).toList())),
+      ]))])).toList()))),
     ])));
   }
 
