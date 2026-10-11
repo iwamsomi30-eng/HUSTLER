@@ -174,3 +174,95 @@ class ContributionMatrix {
     return ContributionMatrix(donors, years.toList()..sort());
   }
 }
+
+
+/// Mstari mmoja wa mtoaji kwenye jedwali la Dashboard: kiasi kwa kila aina ya mchango.
+class DonorGridRow {
+  final String key;
+  String idNo = '';
+  String name = '';
+  String sex = '';
+  DateTime firstDate;
+
+  /// Aina ya mchango -> jumla ndani ya kipindi. Aina ambayo hakutoa haipo kwenye ramani (seli wazi).
+  final Map<String, double> amounts = {};
+
+  DonorGridRow(this.key, this.firstDate);
+
+  double get total => amounts.values.fold<double>(0, (s, v) => s + v);
+}
+
+/// Jedwali la watoaji wote x aina zote za michango (orodha ya kawaida), kwa kipindi/mfuko uliochaguliwa.
+/// Mtoaji anayetoa michango mingi anabaki kwenye mstari mmoja; aina asiyotoa inabaki wazi.
+class DonorGrid {
+  final List<DonorGridRow> rows;
+  final List<String> columns;
+  final Map<String, double> columnTotals;
+  const DonorGrid(this.rows, this.columns, this.columnTotals);
+
+  double get grandTotal => columnTotals.values.fold<double>(0, (s, v) => s + v);
+
+  /// Mtoaji anatambuliwa kwa jina (herufi kubwa, nafasi moja), kwa sababu namba ya michango
+  /// isiyo FUNGU hutengenezwa na mfumo na si namba ya mtoaji. Jina likikosekana, anatumia aina+namba.
+  static DonorGrid build(
+    List<Map<String, Object?>> ledger, {
+    required List<String> catalog,
+    DateTime? from,
+    DateTime? to,
+    String? fundName,
+    bool includeAll = false,
+  }) {
+    final start = from == null ? null : DateTime(from.year, from.month, from.day);
+    final endExclusive = to == null ? null : DateTime(to.year, to.month, to.day + 1);
+    final fundWanted = fundName?.trim();
+    final byKey = <String, DonorGridRow>{};
+    final totals = <String, double>{};
+    final extra = <String>{};
+
+    for (final r in ledger) {
+      final date = DateTime.tryParse('${r['date'] ?? ''}');
+      if (date == null) continue;
+      final isFungu = r['type'] == 'FUNGU';
+      final idNo = '${r['id_no'] ?? ''}'.trim();
+      final name = '${r['donor_name'] ?? ''}'.trim();
+      final nameKey = name.toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+      final key = nameKey.isNotEmpty ? 'N|$nameKey' : '${isFungu ? 'F' : 'O'}|$idNo';
+
+      final inRange = (start == null || !date.isBefore(start)) && (endExclusive == null || date.isBefore(endExclusive));
+      final fundOk = fundWanted == null || '${r['fund_name'] ?? ''}'.trim() == fundWanted;
+      final counts = inRange && fundOk;
+      final registered = endExclusive == null || date.isBefore(endExclusive);
+      if (!counts && !(includeAll && registered)) continue;
+
+      final row = byKey.putIfAbsent(key, () => DonorGridRow(key, date));
+      if (date.isBefore(row.firstDate)) row.firstDate = date;
+      if (name.isNotEmpty) row.name = name;
+      final sex = '${r['sex'] ?? ''}'.trim();
+      if (sex.isNotEmpty) row.sex = sex;
+      if (idNo.isNotEmpty && (isFungu || row.idNo.isEmpty)) row.idNo = idNo;
+
+      if (counts) {
+        final amount = (r['amount'] as num?)?.toDouble() ?? 0;
+        final cn = '${r['contribution_name'] ?? ''}'.trim();
+        final cname = cn.isEmpty ? (isFungu ? 'FUNGU' : '—') : cn;
+        row.amounts[cname] = (row.amounts[cname] ?? 0) + amount;
+        totals[cname] = (totals[cname] ?? 0) + amount;
+        if (!catalog.contains(cname)) extra.add(cname);
+      }
+    }
+
+    final rows = byKey.values.toList()
+      ..sort((a, b) {
+        if (a.idNo.isEmpty != b.idNo.isEmpty) return a.idNo.isEmpty ? 1 : -1;
+        final c = ContributionMatrix._naturalCompare(a.idNo, b.idNo);
+        if (c != 0) return c;
+        return a.name.compareTo(b.name);
+      });
+
+    final columns = <String>[
+      for (final c in catalog.toSet()) c,
+      ...(extra.toList()..sort()),
+    ];
+    return DonorGrid(rows, columns, totals);
+  }
+}
