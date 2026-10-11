@@ -1,10 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../core/catalog.dart';
+import '../core/contribution_matrix.dart';
 import '../core/db.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../services/overall_export_service.dart';
+import '../widgets/donor_grid_table.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -25,6 +27,13 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Map<String,Object?>> _funds = [];
   List<Map<String,Object?>> _daily = [];
   List<String> _fundNames = [];
+  List<Map<String,Object?>> _ledger = [];
+  List<String> _catalog = [];
+  bool _showNames = false;
+  bool _showAllDonors = false;
+
+  /// Jedwali la watoaji wote kwa kipindi na mfuko uliochaguliwa kwenye vichujio.
+  DonorGrid get _grid => DonorGrid.build(_ledger, catalog:_catalog, from:_from, to:_to, fundName:_fund=='ALL'?null:_fund, includeAll:_showAllDonors);
 
   double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
   String _money(Object? v) => 'TZS ${_num(v).round().toString()}';
@@ -43,6 +52,8 @@ class _DashboardPageState extends State<DashboardPage> {
         AppDb.instance.getOverallFundBreakdown(from:_from,to:_to,fundName:_fund=='ALL'?null:_fund),
         AppDb.instance.getOverallDailyTrend(from:_from,to:_to,fundName:_fund=='ALL'?null:_fund),
         AppDb.instance.getBalanceFundNames(),
+        AppDb.instance.getContributionLedger(),
+        NameCatalog.contributions(),
       ]);
       if(!mounted)return;
       setState((){
@@ -52,6 +63,8 @@ class _DashboardPageState extends State<DashboardPage> {
         _funds=(r[3] as List).map((e)=>Map<String,Object?>.from(e as Map)).toList();
         _daily=(r[4] as List).map((e)=>Map<String,Object?>.from(e as Map)).toList();
         _fundNames=List<String>.from(r[5] as List);
+        _ledger=(r[6] as List).map((e)=>Map<String,Object?>.from(e as Map)).toList();
+        _catalog=List<String>.from(r[7] as List);
         _loading=false;
       });
     }catch(e){ if(!mounted)return; setState((){_loading=false;_error=tr('dash_load_failed');}); }
@@ -78,9 +91,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _export(bool pdf) async {
     try {
       if(pdf){
-        await OverallExportService.sharePdf(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily);
+        await OverallExportService.sharePdf(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily,donorGrid:_grid,donorNames:_showNames);
       }else{
-        final r=await OverallExportService.saveExcel(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily);
+        final r=await OverallExportService.saveExcel(from:_from,to:_to,stats:_stats,contributions:_contrib,categories:_expense,funds:_funds,daily:_daily,donorGrid:_grid,donorNames:_showNames);
         if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(duration:const Duration(seconds:6),content:Text(r.cancelled?tr('excel_cancelled'):'${tr('excel_saved')}: ${r.name}${r.displayPath!=null?'\n${r.displayPath}':''}')));
       }
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(tr('dash_export_failed'))));}
@@ -93,7 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _hero(),const SizedBox(height:16),_filters(),const SizedBox(height:16),
         if(_loading)const Padding(padding:EdgeInsets.all(70),child:Center(child:CircularProgressIndicator())) else if(_error!=null)_errorCard() else ...[
           _kpis(),const SizedBox(height:16),_insights(),const SizedBox(height:16),_trendCard(),const SizedBox(height:16),
-          _analysisGrid(),const SizedBox(height:16),_fundTable(),const SizedBox(height:16),_exportCard(),
+          _analysisGrid(),const SizedBox(height:16),_fundTable(),const SizedBox(height:16),_donorGridPanel(),const SizedBox(height:16),_exportCard(),
         ],
       ])))));
     });
@@ -129,6 +142,21 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _collectionPanel()=>_panel(tr('dash_collection_breakdown'),Icons.savings_outlined,Column(children:[if(_contrib.isEmpty)Text(tr('dash_no_data'),style:const TextStyle(color:C.muted)) else ..._contrib.map((r){final v=_num(r['total']);final total=_contrib.fold<double>(0,(s,x)=>s+_num(x['total']));final double pct=total<=0?0.0:v/total;final isF='${r['type']}'=='FUNGU';return Padding(padding:const EdgeInsets.symmetric(vertical:8),child:Column(children:[Row(children:[Icon(isF?Icons.mark_email_read_outlined:Icons.volunteer_activism_outlined,color:isF?C.blue:C.teal,size:19),const SizedBox(width:8),Expanded(child:Text(isF?tr('fungu'):tr('other_contributions'),style:const TextStyle(fontWeight:FontWeight.w700))),Text(_money(v),style:const TextStyle(fontWeight:FontWeight.w800,color:C.navy)),const SizedBox(width:8),Text('${(pct*100).toStringAsFixed(1)}%',style:const TextStyle(fontSize:10,color:C.muted))]),const SizedBox(height:5),ClipRRect(borderRadius:BorderRadius.circular(5),child:LinearProgressIndicator(value:pct,minHeight:7,backgroundColor:C.bg,color:isF?C.blue:C.teal))]));})]));
 
   Widget _fundTable()=>_panel(tr('dash_fund_title'),Icons.account_balance_wallet_outlined,Column(children:[if(_funds.isEmpty)Text(tr('dash_no_data'),style:const TextStyle(color:C.muted)) else SingleChildScrollView(scrollDirection:Axis.horizontal,child:DataTable(headingRowColor:MaterialStatePropertyAll(C.bg),columns:[DataColumn(label:Text(tr('dash_fund'))),DataColumn(label:Text(tr('makusanyo'))),DataColumn(label:Text(tr('matumizi'))),DataColumn(label:Text(tr('salio')))],rows:_funds.map((r){final b=_num(r['balance']);return DataRow(cells:[DataCell(Text(fundLabel(r['fund_name']),style:const TextStyle(fontWeight:FontWeight.w700))),DataCell(Text(_money(r['income']))),DataCell(Text(_money(r['expenditure']))),DataCell(Text(_money(b),style:TextStyle(color:b>=0?C.teal:Colors.red,fontWeight:FontWeight.w900)))]);}).toList()))]));
+
+  Widget _donorGridPanel(){
+    final g=_grid;
+    return _panel(tr('dash_donor_grid_title'),Icons.groups_outlined,Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(tr('dash_donor_grid_hint'),style:const TextStyle(fontSize:11.5,color:C.muted)),
+      const SizedBox(height:10),
+      Wrap(spacing:18,runSpacing:4,crossAxisAlignment:WrapCrossAlignment.center,children:[
+        Text('${g.rows.length} ${tr('donors_count')}  •  ${tr('total')}: ${_money(g.grandTotal)}',style:const TextStyle(fontSize:12.5,fontWeight:FontWeight.w700,color:C.text)),
+        Row(mainAxisSize:MainAxisSize.min,children:[Switch(value:_showNames,onChanged:(v)=>setState(()=>_showNames=v)),Text(tr('show_names'),style:const TextStyle(fontSize:12,fontWeight:FontWeight.w700))]),
+        Row(mainAxisSize:MainAxisSize.min,children:[Switch(value:_showAllDonors,onChanged:(v)=>setState(()=>_showAllDonors=v)),Text(tr('dash_show_all_donors'),style:const TextStyle(fontSize:12,fontWeight:FontWeight.w700))]),
+      ]),
+      const SizedBox(height:10),
+      if(g.rows.isEmpty)Text(tr('dash_no_data'),style:const TextStyle(color:C.muted)) else DonorGridTable(grid:g,showNames:_showNames),
+    ]));
+  }
 
   Widget _exportCard()=>Container(padding:const EdgeInsets.all(17),decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(15),border:Border.all(color:C.border)),child:LayoutBuilder(builder:(context,b){final compact=b.maxWidth<650;final actions=Row(mainAxisSize:MainAxisSize.min,children:[OutlinedButton.icon(onPressed:_loading?null:()=>_export(true),icon:const Icon(Icons.picture_as_pdf_outlined),label:Text(tr('dash_export_pdf'))),const SizedBox(width:8),ElevatedButton.icon(onPressed:_loading?null:()=>_export(false),icon:const Icon(Icons.table_view_outlined),label:Text(tr('dash_export_excel')))]);return compact?Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(tr('dash_export_title'),style:const TextStyle(color:C.navy,fontWeight:FontWeight.w900)),const SizedBox(height:5),Text(tr('dash_export_sub'),style:const TextStyle(color:C.muted,fontSize:11)),const SizedBox(height:12),actions]):Row(children:[const Icon(Icons.file_download_outlined,color:C.navy),const SizedBox(width:10),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(tr('dash_export_title'),style:const TextStyle(color:C.navy,fontWeight:FontWeight.w900)),Text(tr('dash_export_sub'),style:const TextStyle(color:C.muted,fontSize:11))])),actions]);}));
 
