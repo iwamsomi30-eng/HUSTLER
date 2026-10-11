@@ -994,7 +994,8 @@ class AppDb {
       SELECT b.date AS date, COALESCE(b.service, 1) AS service,
              f.id AS row_id, f.envelope_no AS id_no, f.donor_name AS donor_name,
              f.contact AS contact, f.sex AS sex,
-             CAST(COALESCE(f.amount, 0) AS REAL) AS amount, f.receipt_no AS receipt_no
+             CAST(COALESCE(f.amount, 0) AS REAL) AS amount, f.receipt_no AS receipt_no,
+             b.fund_name AS fund_name
       FROM contribution_batches b
       JOIN fungu_contributions f ON f.batch_id = b.id
       ORDER BY b.date ASC, f.id ASC
@@ -1003,7 +1004,8 @@ class AppDb {
       SELECT b.date AS date, COALESCE(b.service, 1) AS service,
              o.id AS row_id, o.name_no AS id_no, o.donor_name AS donor_name,
              o.contact AS contact, o.sex AS sex, o.contribution_name AS contribution_name,
-             CAST(COALESCE(o.amount, 0) AS REAL) AS amount, o.receipt_no AS receipt_no
+             CAST(COALESCE(o.amount, 0) AS REAL) AS amount, o.receipt_no AS receipt_no,
+             b.fund_name AS fund_name
       FROM contribution_batches b
       JOIN other_contributions o ON o.batch_id = b.id
       ORDER BY b.date ASC, o.id ASC
