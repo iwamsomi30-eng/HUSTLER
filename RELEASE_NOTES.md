@@ -11,3 +11,4 @@
 - Muhtasari wa Matumizi, Salio na Dashibodi sasa vinaonyesha pia majina mapya yaliyoongezwa.
 - Ukurasa mpya "Marekebisho ya Ujumbe": admin anaweka namba ya risiti ya ujumbe wa awali na kutuma ujumbe wa kurekebisha taarifa zilizotumwa kimakosa kwa mchangiaji; historia ya jumbe inahifadhiwa.
 - Namba ya risiti ina muundo mpya: TAG-STK-MWAKA-MMSS-SAA-JINA-NAMBA-KIPEKEE (mfano TAG-STK-2026-1011-1423-FU-125-7K3QX9). Risiti za zamani zinaendelea kufanya kazi bila kubadilishwa.
+- Dirisha la kuhariri matumizi sasa lina orodha ya majina ya matumizi yenye chaguo la "Ongeza jina jipya", kama ukurasa wa kuingiza matumizi.
