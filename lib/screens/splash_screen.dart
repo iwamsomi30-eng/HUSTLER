@@ -24,7 +24,7 @@ class SplashScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('MFUKO WA MAPATO YA KANISA',
+                    const Text('TAG SHALOM KIBAMBA TEMPO HOSPITAL',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: C.navy, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: .5)),
                     const SizedBox(height: 16),
@@ -33,7 +33,7 @@ class SplashScreen extends StatelessWidget {
                     else ...[
                       Text(error!, textAlign: TextAlign.center, style: TextStyle(color: Colors.red.shade700, fontSize: 12.5)),
                       const SizedBox(height: 10),
-                      if (onRetry != null) OutlinedButton(onPressed: onRetry, child: const Text('Jaribu tena / Retry')),
+                      if (onRetry != null) OutlinedButton(onPressed: onRetry, child: const Text('Jaribu tena')),
                     ],
                   ],
                 ),
