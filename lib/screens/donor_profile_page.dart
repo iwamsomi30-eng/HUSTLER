@@ -121,7 +121,7 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
       );
 
   Widget _hero(DonorRecord d) {
-    final last = d.entries.isEmpty ? null : (d.entries.map((e) => e.date).reduce((a, b) => a.isAfter(b) ? a : b));
+    final last = d.entries.isEmpty ? null : d.entries.reduce((a, b) => a.sortTime.isAfter(b.sortTime) ? a : b);
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -135,7 +135,7 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
         _kv(tr('contact'), _showNames ? (d.contact.isEmpty ? '—' : d.contact) : '••••••••'),
         _kv(tr('sex'), d.sex.isEmpty ? '—' : d.sex),
         _kv(tr('col_reg_date'), _date(d.firstDate)),
-        if (last != null) _kv(tr('donor_last_gift'), _date(last)),
+        if (last != null) _kv(tr('donor_last_gift'), last.timeLabel.isEmpty ? _date(last.date) : '${_date(last.date)}   ${last.timeLabel}'),
         const Divider(height: 24),
         Row(children: [
           Expanded(child: _metric(tr('donor_total'), _money(d.total))),
@@ -175,7 +175,8 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
   }
 
   Widget _entries(DonorRecord d) {
-    final list = [...d.entries]..sort((a, b) => b.date.compareTo(a.date));
+    // Kila mchango unaonekana peke yake, mpya juu, ukiwa na tarehe na saa.
+    final list = [...d.entries]..sort((a, b) => b.sortTime.compareTo(a.sortTime));
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(tr('donor_entries'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: C.navy)),
@@ -185,7 +186,14 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.border))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(width: 92, child: Text(_date(e.date), style: const TextStyle(fontSize: 12, color: C.muted))),
+              SizedBox(
+                width: 96,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_date(e.date), style: const TextStyle(fontSize: 12, color: C.muted)),
+                  if (e.timeLabel.isNotEmpty)
+                    Text(e.timeLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.text)),
+                ]),
+              ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(e.contributionName, style: const TextStyle(fontWeight: FontWeight.w700, color: C.text)),
