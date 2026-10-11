@@ -161,7 +161,10 @@ class MatrixExportService {
 
   // ───────────────────────── Mtoaji mmoja ─────────────────────────
 
-  static List<DonorEntry> _sorted(DonorRecord d) => [...d.entries]..sort((a, b) => a.date.compareTo(b.date));
+  static List<DonorEntry> _sorted(DonorRecord d) => [...d.entries]..sort((a, b) => a.sortTime.compareTo(b.sortTime));
+
+  /// Tarehe ya mchango pamoja na saa ya kuingizwa (kama inajulikana).
+  static String _dt(DonorEntry e) => e.timeLabel.isEmpty ? _d(e.date) : '${_d(e.date)} ${e.timeLabel}';
 
   /// Kisanduku cha taarifa za mtoaji husika: jina, namba, jinsia na tarehe ya usajili.
   static pw.Widget _donorInfoBox(DonorRecord d) {
@@ -212,7 +215,7 @@ class MatrixExportService {
         pw.SizedBox(height: 4),
         pw.TableHelper.fromTextArray(
           headers: [tr('date_label'), tr('contribution_name'), tr('amount'), tr('receipt')],
-          data: entries.map((e) => [_d(e.date), e.contributionName, _money(e.amount), e.receiptNo]).toList(),
+          data: entries.map((e) => [_dt(e), e.contributionName, _money(e.amount), e.receiptNo]).toList(),
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
           cellStyle: const pw.TextStyle(fontSize: 8),
           headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
@@ -250,7 +253,7 @@ class MatrixExportService {
     final entries = _sorted(d);
     for (var i = 0; i < entries.length; i++) {
       final e = entries[i];
-      put(0, 5 + i, _d(e.date));
+      put(0, 5 + i, _dt(e));
       put(1, 5 + i, e.contributionName);
       put(2, 5 + i, e.amount);
       put(3, 5 + i, e.receiptNo);
