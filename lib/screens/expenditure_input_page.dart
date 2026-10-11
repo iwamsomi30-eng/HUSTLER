@@ -144,7 +144,7 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
       final narrow = c.maxWidth < 760;
       final fields = [
         _field('TAREHE YA MATUMIZI', TextField(controller: TextEditingController(text: '${_date.day.toString().padLeft(2,'0')}/${_date.month.toString().padLeft(2,'0')}/${_date.year}'), readOnly: true, onTap: _pickDate, decoration: _decoration(Icons.calendar_today_outlined))),
-        _field('MFUKO / SOURCE FUND', TextField(controller: _fund, decoration: _decoration(Icons.account_balance_wallet_outlined, hint: 'Mf. Mfuko wa Ujenzi'))),
+        _field('MFUKO WA CHANZO', TextField(controller: _fund, decoration: _decoration(Icons.account_balance_wallet_outlined, hint: 'Mf. Mfuko wa Ujenzi'))),
       ];
       return Flex(direction: narrow ? Axis.vertical : Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.start, children: [for (var i=0;i<fields.length;i++) Expanded(flex: 1, child: Padding(padding: EdgeInsets.only(right: (!narrow && i==0)?10:0, bottom: narrow?10:0), child: fields[i]))]);
     })),
@@ -168,7 +168,7 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
     const SizedBox(height: 14),
     ...List.generate(_rows.length, (i) => _row(i)),
     const SizedBox(height: 12),
-    TextField(controller: _note, maxLines: 2, decoration: _decoration(Icons.notes_outlined, hint: 'Maelezo ya jumla / kumbukumbu (optional)')),
+    TextField(controller: _note, maxLines: 2, decoration: _decoration(Icons.notes_outlined, hint: 'Maelezo ya jumla (si lazima)')),
     const SizedBox(height: 16),
     Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _saving ? null : _save, icon: _saving ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : const Icon(Icons.save_outlined), label: Text(_saving ? tr('saving') : 'SAVE MATUMIZI'))),
   ])));
@@ -178,9 +178,9 @@ class _ExpenditureInputPageState extends State<ExpenditureInputPage> {
     return Padding(padding: const EdgeInsets.only(bottom: 10), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(13), border: Border.all(color: Colors.grey.shade200)), child: LayoutBuilder(builder: (_, c) {
       final narrow = c.maxWidth < 800;
       final children = [
-        _field('MAELEZO / ITEM', TextField(controller:r.description, onChanged:(_)=>setState((){}), decoration:_decoration(Icons.description_outlined, hint:'Mf. Mshahara / vifaa'))),
-        _field('MLIPWA / PAYEE', TextField(controller:r.payee, decoration:_decoration(Icons.person_outline, hint:'Jina (optional)'))),
-        _field('REFERENCE', TextField(controller:r.reference, decoration:_decoration(Icons.tag, hint:'Voucher / invoice'))),
+        _field('MAELEZO YA MATUMIZI', TextField(controller:r.description, onChanged:(_)=>setState((){}), decoration:_decoration(Icons.description_outlined, hint:'Mf. Mshahara / vifaa'))),
+        _field('MLIPWAJI', TextField(controller:r.payee, decoration:_decoration(Icons.person_outline, hint:'Jina (optional)'))),
+        _field('REFERENCE', TextField(controller:r.reference, decoration:_decoration(Icons.tag, hint:'Namba ya hati ya malipo'))),
         _field('KIASI (TZS)', TextField(controller:r.amount, keyboardType:const TextInputType.numberWithOptions(decimal:true), onChanged:(_)=>setState((){}), decoration:_decoration(Icons.payments_outlined, hint:'0'))),
       ];
       if (narrow) return Column(children:[for(final x in children) Padding(padding:const EdgeInsets.only(bottom:8),child:x), Align(alignment:Alignment.centerRight,child:IconButton(onPressed:()=>_removeRow(i), icon:const Icon(Icons.delete_outline))) ]);
