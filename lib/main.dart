@@ -65,7 +65,7 @@ class _BootAppState extends State<BootApp> {
   Widget build(BuildContext context) {
     if (_ready) return const MfukoApp();
     return MaterialApp(
-      title: 'MFUKO WA MAPATO YA KANISA',
+      title: 'TAG SHALOM KIBAMBA TEMPO HOSPITAL',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: SplashScreen(error: _error, onRetry: _error == null ? null : _boot),
@@ -79,7 +79,7 @@ class MfukoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MFUKO WA MAPATO YA KANISA',
+      title: 'TAG SHALOM KIBAMBA TEMPO HOSPITAL',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: const Gate(),
