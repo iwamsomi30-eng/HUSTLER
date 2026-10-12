@@ -2,7 +2,7 @@
 - Imeongezwa usawazishaji wa karibu na wakati halisi kati ya vifaa, pamoja na kupakia mabadiliko ya ndani kiotomatiki.
 - Imeondolewa kizuizi cha zamani cha kuandika kilichosababisha ujumbe mwekundu “Imeshindikana kuhifadhi” kwenye vifaa vilivyounganishwa.
 - Imeongezwa ulinzi dhidi ya migongano ya taarifa ili vifaa vifanye kazi kwa wakati mmoja bila kimoja kuzuia kingine.
-- Jina la mfumo sasa ni TAG SHALOM KIBAMBA TEMPO HOSPITAL (programu, skrini ya kuanza, PDF, Excel na kisakinishi).
+- Jina la mfumo sasa ni TAG SHALOM TEMPLE KIBAMBA (programu, skrini ya kuanza, PDF, Excel na kisakinishi).
 - Nembo ya TAG imewekwa kwenye alama ya programu (Android na Windows), skrini ya kuanza na vichwa vya PDF.
 - Maingizo ya Michango: "Jina la Mchango" sasa ni orodha ya kuchagua (FUNGU, INJILI, UJENZI, WAJANE, MAANDIKO, SHUKRANI, UMISHENI, SADAKA) yenye chaguo la kuongeza jina jipya.
 - Maingizo ya Matumizi: "Jina la Matumizi" ni orodha ya kuchagua (UJENZI, MALIPO YA WAHUDUMU, MALIPO YA MATENGENEZO, MALIPO YA MANUNUZI) yenye chaguo la kuongeza jina jipya.
