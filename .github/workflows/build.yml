@@ -1,4 +1,4 @@
-name: TAG SHALOM KIBAMBA TEMPO HOSPITAL - Production Build
+name: TAG SHALOM TEMPLE KIBAMBA - Production Build
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: "TAG SHALOM KIBAMBA TEMPO HOSPITAL"
+  APP_NAME: "TAG SHALOM TEMPLE KIBAMBA"
   APP_ID: "mfuko_wa_kanisa"
 
 jobs:
@@ -57,7 +57,7 @@ jobs:
 
           if (Test-Path $file) {
             $content = Get-Content $file -Raw
-            $content = $content -replace 'L"mfuko_wa_kanisa"', 'L"TAG SHALOM KIBAMBA TEMPO HOSPITAL"'
+            $content = $content -replace 'L"mfuko_wa_kanisa"', 'L"TAG SHALOM TEMPLE KIBAMBA"'
             Set-Content $file $content
           }
 
@@ -135,9 +135,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path installer | Out-Null
 
           @'
-          #define MyAppName "TAG SHALOM KIBAMBA TEMPO HOSPITAL"
+          #define MyAppName "TAG SHALOM TEMPLE KIBAMBA"
           #define MyAppVersion "0.9.2"
-          #define MyAppPublisher "TAG SHALOM KIBAMBA TEMPO HOSPITAL"
+          #define MyAppPublisher "TAG SHALOM TEMPLE KIBAMBA"
           #define MyAppExeName "mfuko_wa_kanisa.exe"
 
           [Setup]
@@ -298,7 +298,7 @@ jobs:
 
           root = pathlib.Path("android")
           brand = pathlib.Path("branding/android")
-          app_label = sys.argv[1] if len(sys.argv) > 1 else "TAG Shalom Kibamba Tempo Hospital"
+          app_label = sys.argv[1] if len(sys.argv) > 1 else "TAG Shalom Temple Kibamba"
 
           def fail(msg):
               print("ERROR:", msg)
@@ -405,7 +405,7 @@ jobs:
           print("init script written")
           PY
         env:
-          APP_LABEL: "TAG Shalom Kibamba Tempo Hospital"
+          APP_LABEL: "TAG Shalom Temple Kibamba"
 
       - name: Get dependencies
         run: flutter pub get
