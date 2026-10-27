@@ -55,6 +55,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _key = GlobalKey<ScaffoldState>();
   int _index = 0; // 0..7 main, 8 sync, 9 settings, 10 about
   Timer? _updTimer;
+  bool _dlgOpen = false;
   String? _prompted; // toleo ambalo dirisha limeshaonyeshwa kwenye session hii
 
   @override
@@ -83,9 +84,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (!UpdateConfig.enabled) return;
     await UpdateService.instance.check();
     final u = UpdateService.instance.available;
-    if (!mounted || u == null || _prompted == u.version) return;
+    if (!mounted || u == null || _dlgOpen) return;
+    // Update ya lazima inaonyeshwa tena kila ukaguzi; ya hiari mara moja kwa toleo.
+    if (_prompted == u.version && !u.required) return;
     _prompted = u.version;
+    _dlgOpen = true;
     await showUpdateDialog(context, u);
+    _dlgOpen = false;
   }
 
   _Nav get _cur => _index < _navMain.length ? _navMain[_index] : _navBottom[_index - _navMain.length];
