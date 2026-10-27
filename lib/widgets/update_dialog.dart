@@ -62,7 +62,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   Widget build(BuildContext context) {
     final u = widget.info;
     final mb = u.assetSize > 0 ? ' (${(u.assetSize / 1048576).toStringAsFixed(1)} MB)' : '';
-    return AlertDialog(
+    return PopScope(
+      canPop: !u.required,
+      child: AlertDialog(
       backgroundColor: Colors.white,
       title: Row(children: [
         const Icon(Icons.system_update, color: C.blue),
@@ -99,16 +101,21 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 Text(_msg!, style: const TextStyle(color: Colors.redAccent)),
               ],
               const SizedBox(height: 10),
-              Text(tr('upd_optional'), style: const TextStyle(color: C.muted, fontSize: 12)),
+              Text(u.required ? tr('upd_required') : tr('upd_optional'),
+                  style: TextStyle(
+                      color: u.required ? Colors.redAccent : C.muted,
+                      fontSize: 12,
+                      fontWeight: u.required ? FontWeight.w700 : FontWeight.w400)),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: Text(tr('upd_later')),
-        ),
+        if (!u.required)
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: Text(tr('upd_later')),
+          ),
         ElevatedButton.icon(
           onPressed: _busy ? null : _go,
           icon: const Icon(Icons.download),
@@ -116,6 +123,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           style: ElevatedButton.styleFrom(backgroundColor: C.blue),
         ),
       ],
+      ),
     );
   }
 }
