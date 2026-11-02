@@ -1,0 +1,880 @@
+import 'dart:ui' show PointerDeviceKind;
+import 'package:flutter/material.dart';
+import '../core/catalog.dart';
+import '../core/contribution_matrix.dart';
+import '../core/db.dart';
+import '../core/i18n.dart';
+import '../core/theme.dart';
+import '../services/contribution_export_service.dart';
+import '../services/matrix_export_service.dart';
+import 'donor_profile_page.dart';
+import '../widgets/name_picker.dart';
+
+/// Inaruhusu kuburuta jedwali kwa mouse/touchpad/kalamu (si kwa kidole tu),
+/// ili kuscroll horizontally kuwe rahisi kwenye kompyuta pia.
+class _DragAnywhere extends MaterialScrollBehavior {
+  final bool autoScrollbar;
+  const _DragAnywhere({this.autoScrollbar = true});
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.unknown,
+      };
+
+  @override
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) =>
+      autoScrollbar ? super.buildScrollbar(context, child, details) : child;
+}
+
+class ContributionRecordsPage extends StatefulWidget {
+  const ContributionRecordsPage({super.key});
+
+  @override
+  State<ContributionRecordsPage> createState() => _ContributionRecordsPageState();
+}
+
+class _ContributionRecordsPageState extends State<ContributionRecordsPage> {
+  final _search = TextEditingController();
+  DateTime? _from;
+  DateTime? _to;
+  bool _loading = true;
+  List<Map<String, Object?>> _days = [];
+  bool _matrixView = true;
+  bool _showNames = false;
+  int? _year;
+  ContributionMatrix? _matrix;
+
+  // Jedwali: scroll ya kulia/kushoto na ya juu/chini (safu za kushoto zinakaa mahali pamoja).
+  final _hScroll = ScrollController();
+  final _vLeft = ScrollController();
+  final _vRight = ScrollController();
+  bool _vSyncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _vLeft.addListener(() => _linkV(_vLeft, _vRight));
+    _vRight.addListener(() => _linkV(_vRight, _vLeft));
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    _hScroll.dispose();
+    _vLeft.dispose();
+    _vRight.dispose();
+    super.dispose();
+  }
+
+  /// Panel mbili (kushoto/kulia) zinasogea juu/chini pamoja.
+  void _linkV(ScrollController from, ScrollController to) {
+    if (_vSyncing || !from.hasClients || !to.hasClients) return;
+    _vSyncing = true;
+    final target = from.offset.clamp(0.0, to.position.maxScrollExtent).toDouble();
+    if ((to.offset - target).abs() > 0.5) to.jumpTo(target);
+    _vSyncing = false;
+  }
+
+  void _scrollH(double target) {
+    if (!_hScroll.hasClients) return;
+    final max = _hScroll.position.maxScrollExtent;
+    _hScroll.animateTo(target.clamp(0.0, max).toDouble(), duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = await AppDb.instance.getContributionDaySummaries(
+      search: _search.text,
+      from: _from,
+      to: _to,
+    );
+    final ledger = await AppDb.instance.getContributionLedger();
+    final matrix = ContributionMatrix.build(ledger, search: _search.text, from: _from, to: _to);
+    if (mounted) setState(() { _days = data; _matrix = matrix; _loading = false; });
+  }
+
+  String _date(String raw) {
+    final d = DateTime.tryParse(raw);
+    if (d == null) return raw;
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  String _money(Object? value) {
+    final n = safeNum(value);
+    final s = n.round().toString();
+    return '$s TZS';
+  }
+
+  Future<void> _pick(bool start) async {
+    final initial = start ? (_from ?? DateTime.now()) : (_to ?? _from ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    setState(() { if (start) _from = picked; else _to = picked; });
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: L10n.instance,
+      builder: (context, _) => RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1220),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _header(),
+                const SizedBox(height: 16),
+                _filters(),
+                const SizedBox(height: 14),
+                _viewToggle(),
+                const SizedBox(height: 14),
+                if (_loading) const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
+                else if (_matrixView) _matrixSection()
+                else if (_days.isEmpty) _empty()
+                else ..._days.map(_dayCard),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _header() => Container(
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(
+      color: C.navy,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [BoxShadow(color: C.navy.withOpacity(.12), blurRadius: 18, offset: const Offset(0, 8))],
+    ),
+    child: Row(children: [
+      Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.white.withOpacity(.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.receipt_long, color: Colors.white)),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('nav_michango_records'), style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(tr('records_subtitle'), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ])),
+      IconButton(onPressed: _load, tooltip: tr('dash_refresh'), icon: const Icon(Icons.refresh, color: Colors.white)),
+    ]),
+  );
+
+  Widget _filters() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)),
+    child: LayoutBuilder(builder: (context, box) {
+      final compact = box.maxWidth < 760;
+      final search = TextField(
+        controller: _search,
+        onSubmitted: (_) => _load(),
+        decoration: InputDecoration(
+          hintText: tr('records_search_hint'),
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: () { _search.clear(); _load(); setState(() {}); }, icon: const Icon(Icons.clear)),
+        ),
+        onChanged: (_) => setState(() {}),
+      );
+      final from = OutlinedButton.icon(onPressed: () => _pick(true), icon: const Icon(Icons.event), label: Text(_from == null ? tr('from_date') : _date(_from!.toIso8601String())));
+      final to = OutlinedButton.icon(onPressed: () => _pick(false), icon: const Icon(Icons.event), label: Text(_to == null ? tr('to_date') : _date(_to!.toIso8601String())));
+      final clear = TextButton.icon(onPressed: (_from == null && _to == null && _search.text.isEmpty) ? null : () { setState(() { _from = null; _to = null; _search.clear(); }); _load(); }, icon: const Icon(Icons.filter_alt_off), label: Text(tr('clear_filters')));
+      if (compact) return Column(children: [search, const SizedBox(height: 10), Row(children: [Expanded(child: from), const SizedBox(width: 8), Expanded(child: to)]), Align(alignment: Alignment.centerRight, child: clear)]);
+      return Row(children: [Expanded(child: search), const SizedBox(width: 10), from, const SizedBox(width: 8), to, const SizedBox(width: 6), clear]);
+    }),
+  );
+
+  Widget _dayCard(Map<String, Object?> row) {
+    final day = (row['day'] ?? '').toString();
+    final total = row['total'];
+    final entries = (row['entries'] as num?)?.toInt() ?? 0;
+    final batches = (row['batches'] as num?)?.toInt() ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ContributionDayDetailPage(day: day)));
+            _load();
+          },
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)),
+            child: Row(children: [
+              Container(width: 54, height: 54, decoration: BoxDecoration(color: C.teal.withOpacity(.10), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.calendar_month, color: C.teal)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_date(day), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: C.text)),
+                const SizedBox(height: 5),
+                Text('$entries ${tr('records_entries')}  •  $batches ${tr('records_batches')}', style: const TextStyle(fontSize: 12, color: C.muted)),
+              ])),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: C.navy)),
+                const SizedBox(height: 5),
+                Text(tr('view_details'), style: const TextStyle(fontSize: 12, color: C.teal, fontWeight: FontWeight.w700)),
+              ]),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: C.muted),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ───────────── Jedwali la watoaji kwa miezi na wiki ─────────────
+
+  static const double _wNo = 44, _wName = 170, _wId = 100, _wReg = 104, _wContact = 112;
+  static const double _wCell = 96, _wTot = 92, _rowH = 40, _lineH = 17;
+
+  /// Urefu wa mstari wa mtoaji: unaongezeka ikiwa ana michango mingi (aina/ibada tofauti) kwenye seli moja.
+  double _heightFor(DonorRecord d, int year) {
+    final n = d.linesInYear(year);
+    return n <= 1 ? _rowH : 10 + _lineH * n;
+  }
+
+  Widget _viewToggle() => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: SegmentedButton<bool>(
+      segments: [
+        ButtonSegment(value: true, icon: const Icon(Icons.grid_on), label: Text(tr('matrix_view'))),
+        ButtonSegment(value: false, icon: const Icon(Icons.calendar_month), label: Text(tr('days_view'))),
+      ],
+      selected: {_matrixView},
+      onSelectionChanged: (s) => setState(() => _matrixView = s.first),
+    ),
+  );
+
+  String _periodLabel() {
+    if (_from == null && _to == null) return tr('dash_all');
+    final a = _from == null ? '…' : _date(_from!.toIso8601String());
+    final b = _to == null ? '…' : _date(_to!.toIso8601String());
+    return '$a - $b';
+  }
+
+  Future<void> _exportMatrixExcel() async {
+    final m = _matrix;
+    if (m == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r = await MatrixExportService.saveMatrixExcel(matrix: m, period: _periodLabel());
+      messenger.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(r.cancelled ? tr('excel_cancelled') : '${tr('excel_saved')}: ${r.name}${r.displayPath != null ? '\n${r.displayPath}' : ''}'),
+      ));
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(tr('dash_export_failed'))));
+    }
+  }
+
+  Future<void> _exportMatrixPdf() async {
+    final m = _matrix;
+    if (m == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await MatrixExportService.shareMatrixPdf(matrix: m, period: _periodLabel());
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(tr('dash_export_failed'))));
+    }
+  }
+
+  Future<void> _openDonor(DonorRecord d) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DonorProfilePage(donorKey: d.key, showNames: _showNames)));
+    _load();
+  }
+
+  Widget _hcell(String text, double w, {double h = 52, Color? bg}) => Container(
+    width: w,
+    height: h,
+    alignment: Alignment.center,
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    decoration: BoxDecoration(color: bg ?? C.navy, border: Border(right: BorderSide(color: Colors.white.withOpacity(.25)))),
+    child: Text(text, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
+  );
+
+  List<MapEntry<String, double>> _infoCols() => [
+    MapEntry(tr('col_no'), _wNo),
+    MapEntry(tr('col_name'), _wName),
+    MapEntry(tr('env_or_donor_no'), _wId),
+    MapEntry(tr('col_reg_date'), _wReg),
+    MapEntry(tr('contact'), _wContact),
+  ];
+
+  /// Safu za kwanza zinazokaa mahali pamoja wakati wa kuscroll kulia.
+  int get _stickyCount => isPhone(context) ? 2 : 3;
+
+  Widget _matrixHeader({required bool sticky}) {
+    final cols = _infoCols();
+    final n = _stickyCount;
+    final info = sticky ? cols.sublist(0, n) : cols.sublist(n);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final c in info) _hcell(c.key, c.value),
+      if (!sticky) ...[
+        for (var mo = 1; mo <= 12; mo++)
+          Column(children: [
+            _hcell(tr('month_$mo'), _wCell * 5, h: 28, bg: mo.isOdd ? C.navy : C.teal),
+            Row(children: [for (var w = 1; w <= 5; w++) _hcell('$w', _wCell, h: 24, bg: mo.isOdd ? C.navy : C.teal)]),
+          ]),
+        _hcell(tr('total'), _wTot),
+      ],
+    ]);
+  }
+
+  Widget _amountCell(MatrixCell? c, int month, double h, {required DonorRecord donor, required int week}) {
+    final amount = c?.amount ?? 0;
+    final has = amount > 0;
+    final parts = has ? c!.parts : const <CellPart>[];
+    final box = Container(
+      width: _wCell,
+      height: h,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        color: has ? C.teal.withOpacity(.12) : (month.isOdd ? null : C.teal.withOpacity(.03)),
+        border: Border(left: BorderSide(color: C.border.withOpacity(.6))),
+      ),
+      // Kila mchango unaonyeshwa kwenye mstari wake: AINA + IBADA (I/II) + kiasi.
+      child: has
+          ? Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final p in parts)
+                SizedBox(
+                  height: _lineH,
+                  child: Row(children: [
+                    Expanded(
+                      child: Text('${p.name} ${serviceRoman(p.service)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: C.muted)),
+                    ),
+                    Text(p.amount.round().toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: C.text)),
+                  ]),
+                ),
+            ])
+          : null,
+    );
+    if (!has) return box;
+    return InkWell(onTap: () => _showCellDetail(c!, donor, month, week), child: box);
+  }
+
+  /// Dirisha la maelezo ya seli: kila mchango na aina yake, ibada, kiasi, tarehe na risiti.
+  void _showCellDetail(MatrixCell c, DonorRecord d, int month, int week) {
+    final list = [...c.entries]..sort((a, b) => a.sortTime.compareTo(b.sortTime));
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${d.idNo.isEmpty ? '—' : d.idNo} • ${tr('month_$month')} • ${tr('week_short')} $week', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: C.navy)),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final e in list)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.border))),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          Flexible(child: Text(e.contributionName, style: const TextStyle(fontWeight: FontWeight.w800, color: C.text))),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(color: C.teal.withOpacity(.15), borderRadius: BorderRadius.circular(8)),
+                            child: Text(e.service == 2 ? tr('ibada_two') : tr('ibada_one'), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: C.navy)),
+                          ),
+                        ]),
+                        const SizedBox(height: 2),
+                        Text(_date(e.date.toIso8601String()) + (e.timeLabel.isEmpty ? '' : '  ${e.timeLabel}'), style: const TextStyle(fontSize: 11.5, color: C.muted)),
+                        if (e.receiptNo.isNotEmpty) Text(e.receiptNo, style: const TextStyle(fontSize: 10.5, color: C.muted)),
+                      ]),
+                    ),
+                    Text(_money(e.amount), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy)),
+                  ]),
+                ),
+            ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(tr('close')))],
+      ),
+    );
+  }
+
+  Widget _matrixRow(int index, DonorRecord d, int year, {required bool sticky}) {
+    final h = _heightFor(d, year);
+    Widget cell(String t, double w, {bool left = true, bool bold = false}) => Container(
+      width: w,
+      height: h,
+      alignment: left ? Alignment.centerLeft : Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, color: C.text)),
+    );
+    String info(int c) {
+      switch (c) {
+        case 0:
+          return '${index + 1}';
+        case 1:
+          return _showNames ? (d.name.isEmpty ? '—' : d.name) : '••••••••';
+        case 2:
+          return d.idNo.isEmpty ? '—' : d.idNo;
+        case 3:
+          return _date(d.firstDate.toIso8601String());
+        default:
+          return _showNames ? (d.contact.isEmpty ? '—' : d.contact) : '••••••••';
+      }
+    }
+    const widths = [_wNo, _wName, _wId, _wReg, _wContact];
+    final n = _stickyCount;
+    final from = sticky ? 0 : n;
+    final to = sticky ? n : 5;
+    final yt = d.yearTotal(year);
+    return InkWell(
+      onTap: () => _openDonor(d),
+      child: Container(
+        color: index.isEven ? Colors.white : C.bg,
+        child: Row(children: [
+          for (var c = from; c < to; c++) cell(info(c), widths[c], left: c != 0),
+          if (!sticky) ...[
+            for (var mo = 1; mo <= 12; mo++)
+              for (var w = 1; w <= 5; w++) _amountCell(d.cell(year, mo, w), mo, h, donor: d, week: w),
+            cell(yt > 0 ? _money(yt) : '', _wTot, left: false, bold: true),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  /// Mishale ya kulia/kushoto na njia za mkato kwenda mwezi husika.
+  Widget _hNav(double restInfoW) => Row(children: [
+    IconButton(onPressed: () => _scrollH((_hScroll.hasClients ? _hScroll.offset : 0) - 320), icon: const Icon(Icons.chevron_left)),
+    IconButton(onPressed: () => _scrollH((_hScroll.hasClients ? _hScroll.offset : 0) + 320), icon: const Icon(Icons.chevron_right)),
+    Expanded(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (var mo = 1; mo <= 12; mo++)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ActionChip(
+                label: Text(tr('month_$mo'), style: const TextStyle(fontSize: 11.5)),
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _scrollH(restInfoW + (mo - 1) * 5 * _wCell),
+              ),
+            ),
+          ActionChip(
+            label: Text(tr('total'), style: const TextStyle(fontSize: 11.5)),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _scrollH(double.infinity),
+          ),
+        ]),
+      ),
+    ),
+  ]);
+
+  Widget _matrixSection() {
+    final m = _matrix;
+    if (m == null || m.donors.isEmpty) return _empty();
+    final year = (_year != null && m.years.contains(_year)) ? _year! : m.years.last;
+    final yearTotal = m.donors.fold<double>(0, (s, d) => s + d.yearTotal(year));
+    final infoW = _infoCols().map((c) => c.value).toList();
+    final n = _stickyCount;
+    final leftW = infoW.sublist(0, n).fold<double>(0, (a, b) => a + b);
+    final restInfoW = infoW.sublist(n).fold<double>(0, (a, b) => a + b);
+    final rightW = restInfoW + _wCell * 60 + _wTot;
+    final listH = m.donors.fold<double>(0, (s, d) => s + _heightFor(d, year)).clamp(_rowH * 2, 560.0).toDouble();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text('${tr('year_label')}:', style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy)),
+        for (final y in m.years) ChoiceChip(label: Text('$y'), selected: y == year, onSelected: (_) => setState(() => _year = y)),
+      ]),
+      const SizedBox(height: 12),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: C.border)),
+        child: Wrap(spacing: 14, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Text('${m.donors.length} ${tr('donors_count')}  •  ${tr('total')} $year: ${_money(yearTotal)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: C.text)),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Switch(value: _showNames, onChanged: (v) => setState(() => _showNames = v)),
+            Text(tr('show_names'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(onPressed: _exportMatrixPdf, tooltip: 'PDF', icon: const Icon(Icons.picture_as_pdf)),
+            IconButton(onPressed: _exportMatrixExcel, tooltip: 'Excel', icon: const Icon(Icons.table_view)),
+          ]),
+        ]),
+      ),
+      const SizedBox(height: 6),
+      Text(tr('matrix_hint'), style: const TextStyle(fontSize: 11.5, color: C.muted)),
+      const SizedBox(height: 10),
+      _hNav(restInfoW),
+      Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: C.border)),
+        clipBehavior: Clip.antiAlias,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Safu za kushoto: zinakaa mahali pamoja wakati wa kuscroll kulia.
+          Container(
+            width: leftW,
+            decoration: BoxDecoration(color: Colors.white, border: Border(right: BorderSide(color: C.border, width: 1.5))),
+            child: Column(children: [
+              _matrixHeader(sticky: true),
+              SizedBox(
+                height: listH,
+                child: ListView.builder(
+                  controller: _vLeft,
+                  itemCount: m.donors.length,
+                  itemExtentBuilder: (i, _) => _heightFor(m.donors[i], year),
+                  itemBuilder: (_, i) => _matrixRow(i, m.donors[i], year, sticky: true),
+                ),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: const _DragAnywhere(autoScrollbar: false),
+              child: Scrollbar(
+                controller: _hScroll,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _hScroll,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: rightW,
+                    child: Column(children: [
+                      _matrixHeader(sticky: false),
+                      SizedBox(
+                        height: listH,
+                        child: ListView.builder(
+                          controller: _vRight,
+                          itemCount: m.donors.length,
+                          itemExtentBuilder: (i, _) => _heightFor(m.donors[i], year),
+                          itemBuilder: (_, i) => _matrixRow(i, m.donors[i], year, sticky: false),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _empty() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(48),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)),
+    child: Column(children: [
+      const Icon(Icons.receipt_long_outlined, size: 52, color: C.muted),
+      const SizedBox(height: 12),
+      Text(tr('records_empty'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 6),
+      Text(tr('records_empty_sub'), textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
+    ]),
+  );
+}
+
+class ContributionDayDetailPage extends StatefulWidget {
+  final String day;
+  const ContributionDayDetailPage({super.key, required this.day});
+
+  @override
+  State<ContributionDayDetailPage> createState() => _ContributionDayDetailPageState();
+}
+
+class _ContributionDayDetailPageState extends State<ContributionDayDetailPage> {
+  List<Map<String, Object?>> _rows = [];
+  bool _loading = true;
+  bool _showNames = true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final rows = await AppDb.instance.getContributionDetailsForDay(widget.day);
+    if (mounted) setState(() { _rows = rows; _loading = false; });
+  }
+
+  String _date(String raw) {
+    final d = DateTime.tryParse(raw);
+    if (d == null) return raw;
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  String _money(Object? value) {
+    final n = safeNum(value);
+    return '${n.round().toString()} TZS';
+  }
+
+  double _sumWhere(bool Function(Map<String, Object?>) test) =>
+      _rows.where(test).fold<double>(0, (s, r) => s + safeNum(r['amount']));
+  int _countWhere(bool Function(Map<String, Object?>) test) => _rows.where(test).length;
+  double get _total => _sumWhere((_) => true);
+
+  Future<void> _exportExcel() async {
+    final m = ScaffoldMessenger.of(context);
+    try {
+      final r = await ContributionExportService.saveExcel(day: widget.day, rows: _rows);
+      m.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(r.cancelled ? tr('excel_cancelled') : '${tr('excel_saved')}: ${r.name}${r.displayPath != null ? '\n${r.displayPath}' : ''}'),
+      ));
+    } catch (_) {
+      m.showSnackBar(SnackBar(content: Text(tr('dash_export_failed'))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(isPhone(context) ? _date(widget.day) : '${tr('nav_michango_records')} • ${_date(widget.day)}'),
+      actions: [
+        IconButton(onPressed: _loading ? null : () => ContributionExportService.sharePdf(day: widget.day, rows: _rows), tooltip: 'PDF', icon: const Icon(Icons.picture_as_pdf)),
+        IconButton(onPressed: _loading ? null : _exportExcel, tooltip: 'Excel', icon: const Icon(Icons.table_view)),
+      ],
+    ),
+    body: _loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
+      onRefresh: _load,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(pagePad(context), 16, pagePad(context), 36),
+        child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1220), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _hero(),
+          const SizedBox(height: 14),
+          _toolbar(),
+          const SizedBox(height: 14),
+          if (_rows.isEmpty) _empty() else _groupedRows(),
+        ]))),
+      ),
+    ),
+  );
+
+  Widget _hero() => Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)),
+    child: LayoutBuilder(builder: (context, box) {
+      final compact = box.maxWidth < 700;
+      final cards = [
+        _metric(tr('fungu'), _money(_sumWhere((r) => r['type'] == 'FUNGU')), '${_countWhere((r) => r['type'] == 'FUNGU')} ${tr('records_entries')}'),
+        _metric(tr('other_contributions'), _money(_sumWhere((r) => r['type'] != 'FUNGU')), '${_countWhere((r) => r['type'] != 'FUNGU')} ${tr('records_entries')}'),
+        _metric(tr('total'), _money(_total), '${_rows.length} ${tr('records_entries')}'),
+      ];
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('record_day_title'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: C.navy)), const SizedBox(height: 4), Text(_date(widget.day), style: const TextStyle(color: C.muted))])), const Icon(Icons.verified_outlined, color: C.teal)]),
+        const SizedBox(height: 16),
+        if (compact) Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final c in cards) Padding(padding: const EdgeInsets.only(bottom: 8), child: c)]) else Row(children: [for (var i=0; i<cards.length; i++) Expanded(child: Padding(padding: EdgeInsets.only(right: i==cards.length-1?0:10), child: cards[i]))]),
+      ]);
+    }),
+  );
+
+  Widget _metric(String label, String value, String sub) => Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: C.bg, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 12, color: C.muted)), const SizedBox(height: 5), Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: C.navy)), const SizedBox(height: 3), Text(sub, style: const TextStyle(fontSize: 11, color: C.muted))]));
+
+  Widget _toolbar() => Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: C.border)), child: Row(children: [const Icon(Icons.visibility_outlined, size: 19, color: C.muted), const SizedBox(width: 8), Expanded(child: Text(tr('real_names_admin_only'), style: const TextStyle(fontSize: 12, color: C.muted))), Switch(value: _showNames, onChanged: (v) => setState(() => _showNames = v)), Text(tr('show_names'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))]));
+
+  Widget _groupedRows() {
+    final groups = <String, List<Map<String, Object?>>>{};
+    for (final r in _rows) {
+      final key = '${r['type']}|${r['service']}|${r['batch_id']}|${r['title']}';
+      groups.putIfAbsent(key, () => []).add(r);
+    }
+    return Column(children: groups.entries.map((e) => _batchCard(e.value.first, e.value)).toList());
+  }
+
+  Widget _batchCard(Map<String, Object?> head, List<Map<String, Object?>> rows) {
+    final isFungu = head['type'] == 'FUNGU';
+    final total = rows.fold<double>(0, (s, r) => s + safeNum(r['amount']));
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Container(width: 38, height: 38, decoration: BoxDecoration(color: (isFungu ? C.teal : C.gold).withOpacity(.12), borderRadius: BorderRadius.circular(10)), child: Icon(isFungu ? Icons.mail_outline : Icons.volunteer_activism_outlined, color: isFungu ? C.teal : C.gold)), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isFungu ? tr('fungu') : (head['title'] ?? tr('other_contributions')).toString(), style: const TextStyle(fontWeight: FontWeight.w800, color: C.text)), const SizedBox(height: 2), Text('${tr('service').toUpperCase()} ${head['service']} • ${rows.length} ${tr('records_entries')}', style: const TextStyle(fontSize: 12, color: C.muted))])), Text(_money(total), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy))]),
+      const SizedBox(height: 12),
+      if (isPhone(context)) ...rows.map((r) => _phoneRow(r, isFungu)) else ScrollConfiguration(behavior: const _DragAnywhere(), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(headingRowHeight: 38, dataRowMinHeight: 48, columns: [DataColumn(label: Text(isFungu ? tr('envelope_no') : tr('name_no'))), DataColumn(label: Text(tr('name'))), DataColumn(label: Text(tr('sex'))), DataColumn(label: Text(tr('amount'))), DataColumn(label: Text(tr('contact'))), const DataColumn(label: Text('')),], rows: rows.map((r) => DataRow(cells: [DataCell(Text((isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700))), DataCell(Text(_showNames ? (r['donor_name'] ?? '').toString() : (isFungu ? '••••••' : (r['name_no'] ?? '••••••')).toString())), DataCell(Text((r['sex'] ?? '—').toString())), DataCell(Text(_money(r['amount']))), DataCell(Text((r['contact'] ?? '—').toString())), DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(tooltip: tr('edit'), icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
+        IconButton(tooltip: tr('delete'), icon: Icon(Icons.delete_outline, size: 19, color: Colors.red.shade700), onPressed: () => _deleteRow(r)),
+      ]))])).toList()))),
+    ])));
+  }
+
+  Widget _phoneRow(Map<String, Object?> r, bool isFungu) {
+    final number = (isFungu ? r['envelope_no'] : r['name_no'])?.toString() ?? '';
+    final name = _showNames ? (r['donor_name'] ?? '').toString() : (number.isEmpty ? '••••••' : number);
+    final contact = (r['contact'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(color: const Color(0xFFFAFCFF), borderRadius: BorderRadius.circular(10), border: Border.all(color: C.border)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${isFungu ? tr('envelope_no') : tr('name_no')}: ${number.isEmpty ? '—' : number}', style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy, fontSize: 13)),
+          const SizedBox(height: 3),
+          Text('${name.isEmpty ? '—' : name}${(r['sex'] ?? '').toString().isEmpty ? '' : ' • ${r['sex']}'}', style: const TextStyle(color: C.text, fontSize: 13)),
+          if (contact.isNotEmpty) ...[const SizedBox(height: 2), Text(contact, style: const TextStyle(color: C.muted, fontSize: 12))],
+        ])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Padding(padding: const EdgeInsets.only(right: 8, top: 2), child: Text(_money(r['amount']), style: const TextStyle(fontWeight: FontWeight.w800, color: C.navy, fontSize: 13))),
+          IconButton(tooltip: tr('edit'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.edit_outlined, size: 19), onPressed: () => _editRow(r)),
+          IconButton(tooltip: tr('delete'), visualDensity: VisualDensity.compact, icon: Icon(Icons.delete_outline, size: 19, color: Colors.red.shade700), onPressed: () => _deleteRow(r)),
+        ]),
+      ]),
+    );
+  }
+
+  Future<void> _deleteRow(Map<String, Object?> row) async {
+    final isFungu = row['type'] == 'FUNGU';
+    final number = (isFungu ? row['envelope_no'] : row['name_no'])?.toString() ?? '';
+    final amount = _money(row['amount']);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('delete_record_title')),
+        content: Text(
+          '${tr('delete_record_message')}\n\n'
+          '${isFungu ? tr('envelope_no') : tr('name_no')}: $number\n'
+          '${tr('amount')}: $amount',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('cancel')),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_outline),
+            label: Text(tr('delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await AppDb.instance.deleteContributionRow(
+        id: (row['row_id'] as num).toInt(),
+        isFungu: isFungu,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('delete_contribution_success')),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: C.teal,
+        ),
+      );
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('delete_failed')),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editRow(Map<String, Object?> row) async {
+    final updated = await showDialog<bool>(context: context, builder: (_) => _EditContributionDialog(row: row));
+    if (updated == true) _load();
+  }
+
+  Widget _empty() => Container(width: double.infinity, padding: const EdgeInsets.all(44), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.border)), child: Center(child: Text(tr('records_empty'))));
+}
+
+class _EditContributionDialog extends StatefulWidget {
+  final Map<String, Object?> row;
+  const _EditContributionDialog({required this.row});
+  @override State<_EditContributionDialog> createState() => _EditContributionDialogState();
+}
+
+class _EditContributionDialogState extends State<_EditContributionDialog> {
+  late final TextEditingController _number;
+  late final TextEditingController _name;
+  late final TextEditingController _contact;
+  late final TextEditingController _amount;
+  late final TextEditingController _contribution;
+  String _sex = '';
+  List<String> _names = NameCatalog.contributionDefaults;
+  bool _saving = false;
+
+  bool get isFungu => widget.row['type'] == 'FUNGU';
+
+  @override void initState() {
+    super.initState();
+    _number = TextEditingController(text: (widget.row[isFungu ? 'envelope_no' : 'name_no'] ?? '').toString());
+    _name = TextEditingController(text: (widget.row['donor_name'] ?? '').toString());
+    _contact = TextEditingController(text: (widget.row['contact'] ?? '').toString());
+    _amount = TextEditingController(text: ((widget.row['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0));
+    _contribution = TextEditingController(text: (widget.row['contribution_name'] ?? '').toString());
+    _sex = (widget.row['sex'] ?? '').toString();
+    _loadNames();
+  }
+
+  Future<void> _loadNames() async {
+    final names = await NameCatalog.contributions();
+    final current = _contribution.text.trim();
+    if (current.isNotEmpty && !names.contains(current)) names.add(current);
+    if (mounted) setState(() => _names = names);
+  }
+
+  Future<void> _addName(String name) async {
+    final v = await NameCatalog.add(NameKind.contribution, name);
+    _contribution.text = v;
+    await _loadNames();
+  }
+  @override void dispose() { for (final c in [_number,_name,_contact,_amount,_contribution]) c.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    final amount = double.tryParse(_amount.text.replaceAll(',', '').trim());
+    if (_name.text.trim().isEmpty || amount == null || amount <= 0 || (_number.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('edit_invalid')), backgroundColor: Colors.red.shade700));
+      return;
+    }
+    if (!isFungu && _contribution.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('other_name_required')), backgroundColor: Colors.red.shade700));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      if (isFungu) {
+        await AppDb.instance.updateFunguContribution(id: (widget.row['row_id'] as num).toInt(), envelopeNo: _number.text, donorName: _name.text, contact: _contact.text, amount: amount, sex: _sex.isEmpty ? null : _sex);
+      } else {
+        await AppDb.instance.updateOtherContribution(id: (widget.row['row_id'] as num).toInt(), contributionName: _contribution.text, donorName: _name.text, contact: _contact.text, amount: amount, sex: _sex.isEmpty ? null : _sex);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } finally { if (mounted) setState(() => _saving = false); }
+  }
+
+  @override Widget build(BuildContext context) => AlertDialog(
+    title: Text(tr('edit_record')),
+    content: SizedBox(width: MediaQuery.sizeOf(context).width < 560 ? double.maxFinite : 480, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      if (!isFungu) Padding(padding: const EdgeInsets.only(bottom: 12), child: NamePicker(label: tr('contribution_name'), icon: Icons.label_outline, items: _names, value: _contribution.text.trim(), onChanged: (v) => setState(() => _contribution.text = v), onAdd: _addName)),
+      _field(_number, isFungu ? tr('envelope_no') : tr('name_no'), enabled: false),
+      _field(_name, tr('donor_name')),
+      Padding(padding: const EdgeInsets.only(bottom: 12), child: DropdownButtonFormField<String>(key: ValueKey('edit-sex-$_sex'), value: _sex.isEmpty ? null : _sex, isExpanded: true, decoration: InputDecoration(labelText: tr('sex')), items: [DropdownMenuItem(value: 'KE', child: Text(tr('sex_female'))), DropdownMenuItem(value: 'ME', child: Text(tr('sex_male'))), DropdownMenuItem(value: 'ME&KE', child: Text(tr('sex_couple')))], onChanged: (v) => setState(() => _sex = v ?? ''))),
+      _field(_contact, tr('contact')),
+      _field(_amount, tr('amount'), keyboard: TextInputType.number),
+    ]))),
+    actions: [TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: Text(tr('cancel'))), FilledButton(onPressed: _saving ? null : _save, child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : Text(tr('save_changes')))],
+  );
+
+  Widget _field(TextEditingController c, String label, {bool enabled = true, TextInputType? keyboard}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, enabled: enabled, keyboardType: keyboard, decoration: InputDecoration(labelText: label)));
+}
