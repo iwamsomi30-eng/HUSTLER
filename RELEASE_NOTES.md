@@ -17,3 +17,4 @@
 - Jinsia sasa ina chaguo la tatu "ME & KE" (mume na mke) ili mchango wa wanandoa uwekwe pamoja kwenye jina moja.
 - Admin anaweza kufuta mchango wowote wa mtoaji wakati wowote, pia kupitia ukurasa wa taarifa za mtoaji.
 - Ukurasa mpya "Ujumbe wa Dharura": admin anachagua watu kutoka orodha ya waliosajiliwa na kuwatumia SMS wakati wowote; historia ya jumbe inahifadhiwa.
+- Maingizo ya Michango (isiyo FUNGU): kila mstari sasa una chaguo la "Aina ya Mtoaji": Mtu Binafsi au Mchango wa Pamoja. Mtu binafsi anatambulishwa kwa Namba ya Bahasha (jina, jinsia na simu vinajazwa kutoka usajili) au kwa Jina (mgeni anasajiliwa papo hapo). Mchango wa pamoja hauhitaji majina; unakusanywa kwenye mstari mmoja wa "MCHANGO WA PAMOJA" kwenye Rekodi na Muhtasari, na haupelekewi SMS.
